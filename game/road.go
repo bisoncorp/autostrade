@@ -29,7 +29,14 @@ func (r *road) NodeIndex() int {
 }
 
 func (r *road) Weight() int {
-	return int(api.Distance(r.src.Position(), r.dst.Position()))
+	distance := api.Distance(r.src.Position(), r.dst.Position())
+	tripTime := distance / r.MaxSpeed()
+	r.vehiclesMu.RLock()
+	vNum := float64(len(r.vehicles))
+	r.vehiclesMu.RUnlock()
+	vehiclePerKm := vNum / (distance)
+	tripTime *= vehiclePerKm
+	return int(tripTime)
 }
 
 func newRoad(data api.RoadData, simNodeIndex func(string) int, simSpeed func() float64, src, dst *city) *road {
@@ -53,11 +60,12 @@ func (r *road) Tick() {
 	case <-r.ticker.C:
 		timeElapsed, maxSpeed := time.Now().Sub(r.lastMoveOpTimestamp).Hours()*r.simSpeed(), r.MaxSpeed()
 		distance := api.Distance(r.src.Position(), r.dst.Position())
-		wg := sync.WaitGroup{}
-		wg.Add(len(r.vehicles))
 		r.vehiclesMu.RLock()
-		vehicles := r.vehicles
+		vehicles := make([]*vehicle, len(r.vehicles))
+		copy(vehicles, r.vehicles)
 		r.vehiclesMu.RUnlock()
+		wg := sync.WaitGroup{}
+		wg.Add(len(vehicles))
 		for i, v := range vehicles {
 			go func(v *vehicle, i int) {
 				sr := moveVehicle(v, timeElapsed, maxSpeed, distance)
@@ -70,7 +78,7 @@ func (r *road) Tick() {
 		}
 		wg.Wait()
 		nv := make([]*vehicle, 0, len(vehicles))
-		for _, v := range r.vehicles {
+		for _, v := range vehicles {
 			if v != nil {
 				nv = append(nv, v)
 			}
@@ -128,4 +136,12 @@ func (r *road) SetMaxSpeed(f float64) {
 	r.propertyMu.Lock()
 	defer r.propertyMu.Unlock()
 	r.RoadData.MaxSpeed = f
+}
+
+func (r *road) Src() api.City {
+	return r.src
+}
+
+func (r *road) Dst() api.City {
+	return r.dst
 }

@@ -32,7 +32,7 @@ func (s *simulation) Nodes() []graph.Node {
 	return nodes
 }
 
-func (s *simulation) generateTrip(cityName string) []string {
+func (s *simulation) generateTrip(cityName string, speed float64) []string {
 	srcIndex, dstIndex := s.cityMap[cityName], 0
 	for {
 		dstIndex = rand.Intn(len(s.cities))
@@ -58,7 +58,7 @@ func (s *simulation) AddCity(data api.CityData) api.City {
 	if _, exist := s.cityMap[data.Name]; exist {
 		return nil
 	}
-	c := newCity(data, func(cityName string) []string { return s.generateTrip(cityName) })
+	c := newCity(data, func(cityName string, vSpeed float64) []string { return s.generateTrip(cityName, vSpeed) })
 	s.cityMap[data.Name] = len(s.cities)
 	s.cities = append(s.cities, c)
 	return c

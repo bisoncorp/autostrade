@@ -5,6 +5,7 @@ import (
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/graph"
 	"image/color"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -15,7 +16,7 @@ type city struct {
 
 	api.Runnable
 
-	generateTrip                       func(src string) []string
+	generateTrip                       func(src string, vSpeed float64) []string
 	entryQueue                         *utils.UnboundedChan[vehicle]
 	generationTicker, processingTicker *time.Ticker
 	roads                              []*road
@@ -29,7 +30,7 @@ func (c *city) Links() []graph.Link {
 	return links
 }
 
-func newCity(data api.CityData, generateTrip func(string) []string) *city {
+func newCity(data api.CityData, generateTrip func(string, float64) []string) *city {
 	c := &city{
 		CityData:         data,
 		generateTrip:     generateTrip,
@@ -61,11 +62,12 @@ func (c *city) route(v *vehicle) {
 func (c *city) Tick() {
 	select {
 	case <-c.generationTicker.C:
+		pSpeed := float64(80 + rand.Intn(500))
 		v := newVehicle(api.VehicleData{
 			Plate:          <-plateCh,
 			Color:          c.Color(),
-			PreferredSpeed: 100,
-		}, c.generateTrip(c.Name()))
+			PreferredSpeed: pSpeed,
+		}, c.generateTrip(c.Name(), pSpeed))
 		c.route(v)
 	case <-c.processingTicker.C:
 		select {

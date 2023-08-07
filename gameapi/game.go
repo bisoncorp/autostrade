@@ -1,8 +1,10 @@
 package gameapi
 
 import (
+	"encoding/json"
 	"image/color"
 	"math"
+	"os"
 )
 
 type Runnable interface {
@@ -41,4 +43,43 @@ func Lerp(p1, p2 Position, l float64) Position {
 func Distance(p1, p2 Position) float64 {
 	dx, dy := p2.X-p1.X, p2.Y-p1.Y
 	return math.Sqrt(dx*dx + dy*dy)
+}
+
+func WriteSimulationData(data SimulationData, path string) {
+	file, err := os.Create(path)
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	if err != nil {
+		panic(err)
+	}
+	enc := json.NewEncoder(file)
+	enc.SetIndent("", "\t")
+	err = enc.Encode(data)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func ReadSimulationData(path string) SimulationData {
+	file, err := os.Open(path)
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	if err != nil {
+		panic(err)
+	}
+	enc := json.NewDecoder(file)
+	data := SimulationData{}
+	err = enc.Decode(&data)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }

@@ -37,11 +37,7 @@ func (v *vehicle) Progress() float64 {
 	defer v.propertyMu.RUnlock()
 	return v.VehicleData.Progress
 }
-func (v *vehicle) TotalProgress() float64 {
-	v.propertyMu.RLock()
-	defer v.propertyMu.RUnlock()
-	return v.VehicleData.TotalProgress
-}
+
 func (v *vehicle) PreferredSpeed() float64 {
 	v.propertyMu.RLock()
 	defer v.propertyMu.RUnlock()

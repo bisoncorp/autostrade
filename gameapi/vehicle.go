@@ -6,7 +6,6 @@ type VehicleData struct {
 	Plate          string
 	Color          color.RGBA
 	Progress       float64
-	TotalProgress  float64
 	PreferredSpeed float64
 }
 
@@ -18,8 +17,6 @@ type Vehicle interface {
 
 	// Progress is the progress on the current road. Interval [0, 1)
 	Progress() float64
-	// TotalProgress is the progress from Src() to Dst(). Interval [0, 1)
-	TotalProgress() float64
 
 	// PreferredSpeed of the Vehicle
 	PreferredSpeed() float64
