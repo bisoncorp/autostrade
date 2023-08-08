@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"sync"
+	"time"
 )
 
 const vehicleDimension = 10
@@ -17,8 +18,12 @@ type Map struct {
 
 	OnCityTapped    func(data api.CityData)
 	OnVehicleTapped func(data api.VehicleData)
-	data            api.SimulationData
-	dataMu          sync.RWMutex // protection for multithreading refresh operation
+	OnDataRequired  func() api.SimulationData
+
+	simulationTicker *time.Ticker
+
+	data   api.SimulationData
+	dataMu sync.RWMutex // protection for multithreading refresh operation
 }
 
 func (m *Map) SetData(data api.SimulationData) {
@@ -26,6 +31,26 @@ func (m *Map) SetData(data api.SimulationData) {
 	m.data = data
 	m.dataMu.Unlock()
 	m.Refresh()
+}
+
+func (m *Map) Start() {
+	m.simulationTicker.Reset(time.Second / 60)
+}
+
+func (m *Map) Stop() {
+	m.simulationTicker.Stop()
+}
+
+func (m *Map) run() {
+	go func() {
+
+		for {
+			<-m.simulationTicker.C
+			if m.OnDataRequired != nil {
+				m.SetData(m.OnDataRequired())
+			}
+		}
+	}()
 }
 
 func (m *Map) callOnCityTapped(data api.CityData) {
@@ -48,9 +73,12 @@ func (m *Map) CreateRenderer() fyne.WidgetRenderer {
 	return mr
 }
 
-func NewMap(scale float32) *Map {
-	m := &Map{}
+func NewMap() *Map {
+	m := &Map{
+		simulationTicker: time.NewTicker(time.Second / 60),
+	}
 	m.ExtendBaseWidget(m)
+	m.run()
 	return m
 }
 

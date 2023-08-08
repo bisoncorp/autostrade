@@ -22,15 +22,15 @@ func (v *vehicle) Plate() string {
 	defer v.propertyMu.RUnlock()
 	return v.VehicleData.Plate
 }
-func (v *vehicle) Color() color.RGBA {
+func (v *vehicle) Color() color.Color {
 	v.propertyMu.RLock()
 	defer v.propertyMu.RUnlock()
 	return v.VehicleData.Color
 }
-func (v *vehicle) SetColor(rgba color.RGBA) {
+func (v *vehicle) SetColor(c color.Color) {
 	v.propertyMu.Lock()
 	defer v.propertyMu.Unlock()
-	v.VehicleData.Color = rgba
+	v.VehicleData.Color = colorToRgba(c)
 }
 func (v *vehicle) Progress() float64 {
 	v.propertyMu.RLock()
@@ -47,4 +47,14 @@ func (v *vehicle) SetPreferredSpeed(f float64) {
 	v.propertyMu.Lock()
 	defer v.propertyMu.Unlock()
 	v.VehicleData.PreferredSpeed = f
+}
+
+func colorToRgba(c color.Color) color.RGBA {
+	r, g, b, a := c.RGBA()
+	return color.RGBA{
+		R: uint8(r),
+		G: uint8(g),
+		B: uint8(b),
+		A: uint8(a),
+	}
 }

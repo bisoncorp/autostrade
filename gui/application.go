@@ -5,10 +5,6 @@ import (
 	"fyne.io/fyne/v2/app"
 	"github.com.bisoncorp.autostrade/game"
 	api "github.com.bisoncorp.autostrade/gameapi"
-	gamewid "github.com.bisoncorp.autostrade/gui/widget"
-	"image/color"
-	"log"
-	"time"
 )
 
 type Application struct {
@@ -23,36 +19,13 @@ func NewApplication() *Application {
 	a.wind = a.appl.NewWindow("Autostrade")
 	a.simulation = game.NewFromData(api.ReadSimulationData("schema.json"))
 
-	m := gamewid.NewMap(2)
-	m.OnCityTapped = func(data api.CityData) {
-		log.Println(data)
-	}
-	m.OnVehicleTapped = func(data api.VehicleData) {
-		log.Println(data)
-	}
-	a.wind.SetContent(m)
-	a.simulation.Start()
+	ui, menu := buildSimulationUi(a.simulation, a.wind)
+	a.wind.SetContent(ui)
+	a.wind.SetMainMenu(menu)
 
-	go func() {
-		t := time.Tick(time.Second / 60)
-		for {
-			<-t
-			m.SetData(a.simulation.PackData())
-		}
-	}()
 	return a
 }
 
 func (a *Application) ShowAndRun() {
 	a.wind.ShowAndRun()
-}
-
-func colorToRgba(c color.Color) color.RGBA {
-	r, g, b, a := c.RGBA()
-	return color.RGBA{
-		R: uint8(r),
-		G: uint8(g),
-		B: uint8(b),
-		A: uint8(a),
-	}
 }

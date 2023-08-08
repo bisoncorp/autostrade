@@ -65,7 +65,7 @@ func (c *city) Tick() {
 		pSpeed := float64(80 + rand.Intn(500))
 		v := newVehicle(api.VehicleData{
 			Plate:          <-plateCh,
-			Color:          c.Color(),
+			Color:          colorToRgba(c.Color()),
 			PreferredSpeed: pSpeed,
 		}, c.generateTrip(c.Name(), pSpeed))
 		c.route(v)
@@ -81,15 +81,16 @@ func (c *city) Tick() {
 func (c *city) Name() string {
 	return c.CityData.Name
 }
-func (c *city) Color() color.RGBA {
+func (c *city) Color() color.Color {
 	c.propertyMu.RLock()
 	defer c.propertyMu.RUnlock()
+
 	return c.CityData.Color
 }
-func (c *city) SetColor(col color.RGBA) {
+func (c *city) SetColor(col color.Color) {
 	c.propertyMu.Lock()
 	defer c.propertyMu.Unlock()
-	c.CityData.Color = col
+	c.CityData.Color = colorToRgba(col)
 }
 func (c *city) Position() api.Position {
 	c.propertyMu.RLock()

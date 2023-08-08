@@ -17,8 +17,8 @@ type Runnable interface {
 }
 
 type Colorable interface {
-	Color() color.RGBA
-	SetColor(color.RGBA)
+	Color() color.Color
+	SetColor(color.Color)
 }
 
 type Position struct {

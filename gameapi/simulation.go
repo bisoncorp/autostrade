@@ -21,6 +21,9 @@ type Simulation interface {
 	AddOneWayRoad(src, dst City, data RoadData) Road
 	RemoveRoad(Road)
 
+	City(name string) City
+	Vehicle(plate string) Vehicle
+
 	// Speed for real-time simulation
 	Speed() float64
 	// SetSpeed for real-time simulation

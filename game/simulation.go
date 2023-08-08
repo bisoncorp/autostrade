@@ -14,6 +14,7 @@ type simulation struct {
 	apiMu      sync.Mutex
 	cities     []*city
 	cityMap    map[string]int
+	running    bool
 }
 
 func newSimulation(speed float64) *simulation {
@@ -148,6 +149,31 @@ func (s *simulation) RemoveRoad(r api.Road) {
 	}
 }
 
+func (s *simulation) City(name string) api.City {
+	s.apiMu.Lock()
+	defer s.apiMu.Unlock()
+	if i, exist := s.cityMap[name]; exist {
+		return s.cities[i]
+	}
+	return nil
+}
+
+func (s *simulation) Vehicle(plate string) api.Vehicle {
+	s.apiMu.Lock()
+	defer s.apiMu.Unlock()
+	for _, c := range s.cities {
+		for _, r := range c.roads {
+			vehicles := r.Vehicles()
+			for _, v := range vehicles {
+				if v.Plate() == plate {
+					return v
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (s *simulation) Speed() float64 {
 	s.propertyMu.RLock()
 	defer s.propertyMu.RUnlock()
@@ -219,6 +245,7 @@ func (s *simulation) Start() {
 		}
 		c.Start()
 	}
+	s.running = true
 }
 func (s *simulation) Stop() {
 	s.apiMu.Lock()
@@ -229,8 +256,10 @@ func (s *simulation) Stop() {
 			r.Stop()
 		}
 	}
+	s.running = false
 }
 func (s *simulation) Running() bool {
-	//TODO implement
-	panic("not implemented")
+	s.apiMu.Lock()
+	defer s.apiMu.Unlock()
+	return s.running
 }
