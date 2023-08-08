@@ -9,9 +9,13 @@ import (
 	"time"
 )
 
-const vehicleDimension = 10
-const cityDimension = 20
-const roadDimension = 2
+const (
+	vehicleDimension = 10
+	cityDimension    = 20
+	roadDimension    = 2
+	MapWidth         = 300
+	MapHeight        = 300
+)
 
 type Map struct {
 	widget.BaseWidget
@@ -32,11 +36,9 @@ func (m *Map) SetData(data api.SimulationData) {
 	m.dataMu.Unlock()
 	m.Refresh()
 }
-
 func (m *Map) Start() {
 	m.simulationTicker.Reset(time.Second / 60)
 }
-
 func (m *Map) Stop() {
 	m.simulationTicker.Stop()
 }
@@ -52,13 +54,11 @@ func (m *Map) run() {
 		}
 	}()
 }
-
 func (m *Map) callOnCityTapped(data api.CityData) {
 	if m.OnCityTapped != nil {
 		m.OnCityTapped(data)
 	}
 }
-
 func (m *Map) callOnVehicleTapped(data api.VehicleData) {
 	if m.OnVehicleTapped != nil {
 		m.OnVehicleTapped(data)
@@ -103,7 +103,7 @@ func (m *mapRenderer) Layout(size fyne.Size) {
 	})
 	for i, city := range m.cities {
 		city.Resize(city.MinSize())
-		city.Move(scale(data.Cities[i].Pos.ToPos32()))
+		city.Move(scale(data.Cities[i].Pos.ToPos32(), scaleFactor))
 		centerObject(city)
 	}
 	for i, vehicle := range m.vehicles {
@@ -114,7 +114,7 @@ func (m *mapRenderer) Layout(size fyne.Size) {
 		progress := data.Vehicles[i].Progress
 		actualPos := fyne.Position(api.Lerp(srcPos, dstPos, progress).ToPos32())
 		vehicle.Resize(vehicle.MinSize())
-		vehicle.Move(scale(actualPos))
+		vehicle.Move(scale(actualPos, scaleFactor))
 		centerObject(vehicle)
 	}
 }
@@ -141,7 +141,11 @@ func (m *mapRenderer) Refresh() {
 	canvas.Refresh(m.wid)
 }
 
-func refreshCityObjects(drawableObjects []fyne.CanvasObject, citiesData []api.CityData, onTapped func(data api.CityData)) []fyne.CanvasObject {
+func refreshCityObjects(
+	drawableObjects []fyne.CanvasObject,
+	citiesData []api.CityData,
+	onTapped func(data api.CityData),
+) []fyne.CanvasObject {
 	objects := make([]fyne.CanvasObject, len(citiesData))
 	for i := 0; i < len(objects); i++ {
 		if i < len(drawableObjects) {
@@ -198,9 +202,17 @@ func centerObject(object fyne.CanvasObject) {
 	object.Move(fyne.NewPos(x-w/2, y-h/2))
 }
 
-var scaleFactor float32 = 1
+const scaleFactor = 1
 
-func scale(v struct{ X, Y float32 }) struct{ X, Y float32 } {
-	s := scaleFactor
+func scale(v struct{ X, Y float32 }, scale float32) struct{ X, Y float32 } {
+	s := scale
 	return struct{ X, Y float32 }{X: v.X * s, Y: v.Y * s}
+}
+func calcScaleFactor(size, normalSize fyne.Size) float32 {
+	sw := size.Width / normalSize.Width
+	sh := size.Height / normalSize.Height
+	if sw > sh {
+		return sw
+	}
+	return sh
 }

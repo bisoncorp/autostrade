@@ -43,8 +43,8 @@ type roadRenderer struct {
 
 func (r *roadRenderer) Destroy() {}
 func (r *roadRenderer) Layout(_ fyne.Size) {
-	r.line.Position1 = scale(r.wid.src.Pos.ToPos32())
-	r.line.Position2 = scale(r.wid.dst.Pos.ToPos32())
+	r.line.Position1 = scale(r.wid.src.Pos.ToPos32(), scaleFactor)
+	r.line.Position2 = scale(r.wid.dst.Pos.ToPos32(), scaleFactor)
 	r.line.Refresh()
 }
 func (r *roadRenderer) MinSize() fyne.Size {
