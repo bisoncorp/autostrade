@@ -59,7 +59,7 @@ func (c *city) route(v *vehicle) {
 	}
 }
 
-func (c *city) Tick() {
+func (c *city) update() {
 	select {
 	case <-c.generationTicker.C:
 		pSpeed := float64(80 + rand.Intn(500))

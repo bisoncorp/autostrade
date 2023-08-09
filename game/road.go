@@ -55,7 +55,7 @@ func newRoad(data api.RoadData, simNodeIndex func(string) int, simSpeed func() f
 	return r
 }
 
-func (r *road) Tick() {
+func (r *road) update() {
 	select {
 	case <-r.ticker.C:
 		timeElapsed, maxSpeed := time.Now().Sub(r.lastMoveOpTimestamp).Hours()*r.simSpeed(), r.MaxSpeed()

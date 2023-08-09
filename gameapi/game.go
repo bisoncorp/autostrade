@@ -2,6 +2,7 @@ package gameapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"image/color"
 	"math"
 	"os"
@@ -24,6 +25,52 @@ type Colorable interface {
 type Speedable interface {
 	Speed() float64
 	SetSpeed(float64)
+}
+
+var FirstPlate = Plate{
+	A: 'A',
+	B: 'A',
+	C: 'A',
+	D: 'A',
+	N: 0,
+}
+
+type Plate struct {
+	A, B, C, D rune
+	N          int
+}
+
+func (p Plate) String() string {
+	return fmt.Sprintf("%c%c%03d%c%c", p.A, p.B, p.N, p.C, p.D)
+}
+
+func (p Plate) Next() Plate {
+	incrementRune := func(r rune) (rune, bool) {
+		r++
+		if r == 'Z'+1 {
+			return 'A', true
+		}
+		return r, false
+	}
+	incrementNext := false
+	p.N++
+	if p.N == 1000 {
+		p.N = 0
+		incrementNext = true
+	}
+	if incrementNext {
+		p.D, incrementNext = incrementRune(p.D)
+	}
+	if incrementNext {
+		p.C, incrementNext = incrementRune(p.C)
+	}
+	if incrementNext {
+		p.B, incrementNext = incrementRune(p.B)
+	}
+	if incrementNext {
+		p.A, _ = incrementRune(p.A)
+	}
+	return p
 }
 
 type Position struct {

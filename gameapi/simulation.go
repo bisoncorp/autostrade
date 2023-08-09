@@ -1,9 +1,10 @@
 package gameapi
 
 type SimulationData struct {
-	Speed  float64
-	Cities []CityData
-	Roads  []struct {
+	Speed     float64
+	LastPlate Plate
+	Cities    []CityData
+	Roads     []struct {
 		RoadData
 		SrcIndex, DstIndex int
 	}

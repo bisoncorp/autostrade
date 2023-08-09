@@ -12,6 +12,7 @@ import (
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/gui/controller"
 	gamewid "github.com.bisoncorp.autostrade/gui/widget"
+	"github.com.bisoncorp.autostrade/sampledata"
 	"image/color"
 	"time"
 )
@@ -40,7 +41,7 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window) (fyne.CanvasObjec
 	scrollMap.SetMinSize(fyne.NewSize(300, 300))
 
 	addCityBtn := widget.NewButton("Add", func() {
-		actionAddCity(sim, mapWidget, window)
+		actionAddCity(sim, mapWidget, window, hintController)
 	})
 
 	addRoadBtn := widget.NewButton("Add Road", func() {
@@ -237,9 +238,11 @@ func buildColorChooser(ctrl *controller.ColorableController, window fyne.Window)
 	})
 
 	btn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
-		dialog.ShowColorPicker("Choose Color", "", func(c color.Color) {
+		picker := dialog.NewColorPicker("Choose Color", "", func(c color.Color) {
 			ctrl.SetColor(c)
 		}, window)
+		picker.Advanced = true
+		picker.Show()
 	})
 
 	return container.NewGridWrap(btn.MinSize(), rect, btn)
@@ -298,18 +301,16 @@ func buildSimulationMenu(rc *controller.RunnableController, sc *controller.Speed
 func showCityForm(sim api.Simulation, window fyne.Window) <-chan api.CityData {
 	nameEntry := widget.NewEntry()
 	nameEntry.Validator = func(s string) error {
-		if s == "" {
-			return errors.New("invalid name")
-		}
 		city := sim.City(s)
 		if city != nil {
 			return errors.New("city already exist")
 		}
 		return nil
 	}
+	nameEntry.PlaceHolder = sampledata.RandomCityName()
 	nameItem := widget.NewFormItem("Name", nameEntry)
 
-	colorBuffer := controller.NewColorableController(controller.NewColorableBuffer(color.White))
+	colorBuffer := controller.NewColorableController(controller.NewColorableBuffer(randomColor()))
 	colorItem := widget.NewFormItem(
 		"Color",
 		buildColorChooser(colorBuffer, window),
@@ -342,8 +343,12 @@ func showCityForm(sim api.Simulation, window fyne.Window) <-chan api.CityData {
 			close(ch)
 			return
 		}
+		name := nameEntry.PlaceHolder
+		if nameEntry.Text != "" {
+			name = nameEntry.Text
+		}
 		ch <- api.CityData{
-			Name:           nameEntry.Text,
+			Name:           name,
 			Color:          colorToRgba(colorBuffer.Color()),
 			GenerationTime: generationDuration,
 			ProcessingTime: processingDuration,
@@ -353,22 +358,28 @@ func showCityForm(sim api.Simulation, window fyne.Window) <-chan api.CityData {
 
 	return ch
 }
-func actionAddCity(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Window) {
+func actionAddCity(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Window, hintController *controller.HintController) {
 	go func() {
 		dataCh := showCityForm(sim, window)
 		data, ok := <-dataCh
 		if !ok {
 			return
 		}
+
 		posCh := make(chan fyne.Position)
 		defer close(posCh)
 		mapWidget.OnTapped = func(event *fyne.PointEvent) {
 			posCh <- event.Position
 		}
 		defer func() { mapWidget.OnTapped = nil }()
+
+		hintController.SetHint("Choose position")
 		pos := <-posCh
+		hintController.Clear()
 		data.Pos = api.Position{X: float64(pos.X), Y: float64(pos.Y)}
-		sim.AddCity(data)
+		if city := sim.AddCity(data); sim.Running() {
+			city.Start()
+		}
 	}()
 }
 func showRoadForm(sim api.Simulation, window fyne.Window) <-chan struct {
@@ -419,8 +430,6 @@ func actionAddRoad(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Windo
 		cityCh := make(chan api.City)
 		defer close(cityCh)
 		oldFn := mapWidget.OnCityTapped
-		defer func() { mapWidget.OnCityTapped = oldFn }()
-
 		mapWidget.OnCityTapped = func(data api.CityData) {
 			city := sim.City(data.Name)
 			if city == nil {
@@ -428,15 +437,22 @@ func actionAddRoad(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Windo
 			}
 			cityCh <- city
 		}
+		defer func() { mapWidget.OnCityTapped = oldFn }()
+
 		hintController.SetHint("Select first city")
 		city1 := <-cityCh
 		hintController.SetHint("Select second city")
 		city2 := <-cityCh
 		hintController.Clear()
 		if data.oneWay {
-			sim.AddOneWayRoad(city1, city2, data.data)
+			if road := sim.AddOneWayRoad(city1, city2, data.data); sim.Running() {
+				road.Start()
+			}
 		} else {
-			sim.AddRoad(city1, city2, data.data)
+			if atob, btoa := sim.AddRoad(city1, city2, data.data); sim.Running() {
+				atob.Start()
+				btoa.Start()
+			}
 		}
 	}()
 }

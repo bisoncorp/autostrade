@@ -5,23 +5,23 @@ import (
 	"sync/atomic"
 )
 
-type Ticker interface {
-	Tick()
+type updater interface {
+	update()
 }
 
 type baseRunnable struct {
 	stopCh  chan struct{}
 	running atomic.Bool
-	impl    Ticker
+	impl    updater
 }
 
-func NewBaseRunnable(impl Ticker) gameapi.Runnable {
+func NewBaseRunnable(impl updater) gameapi.Runnable {
 	return &baseRunnable{stopCh: make(chan struct{}), impl: impl}
 }
 
 func (b *baseRunnable) Start() {
 	shouldStart := b.running.CompareAndSwap(false, true)
-	if fn := b.impl.Tick; shouldStart {
+	if fn := b.impl.update; shouldStart {
 		go func() {
 			for {
 				select {
