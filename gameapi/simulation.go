@@ -24,11 +24,8 @@ type Simulation interface {
 	City(name string) City
 	Vehicle(plate string) Vehicle
 
-	// Speed for real-time simulation
-	Speed() float64
-	// SetSpeed for real-time simulation
-	SetSpeed(float64)
-
 	PackData() SimulationData
+
+	Speedable
 	Runnable
 }

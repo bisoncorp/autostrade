@@ -23,6 +23,7 @@ type Map struct {
 	OnCityTapped    func(data api.CityData)
 	OnVehicleTapped func(data api.VehicleData)
 	OnDataRequired  func() api.SimulationData
+	OnTapped        func(event *fyne.PointEvent)
 
 	simulationTicker *time.Ticker
 
@@ -65,6 +66,11 @@ func (m *Map) callOnVehicleTapped(data api.VehicleData) {
 	}
 }
 
+func (m *Map) Tapped(event *fyne.PointEvent) {
+	if m.OnTapped != nil {
+		m.OnTapped(event)
+	}
+}
 func (m *Map) CreateRenderer() fyne.WidgetRenderer {
 	mr := &mapRenderer{
 		wid: m,

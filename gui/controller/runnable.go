@@ -20,6 +20,10 @@ type RunnableController struct {
 	callbacksMu    sync.Mutex
 }
 
+func NewRunnableController(runnableObject gameapi.Runnable) *RunnableController {
+	return &RunnableController{RunnableObject: runnableObject, callbacks: make([]RunnableCallback, 0)}
+}
+
 func (r *RunnableController) AddCallback(fn RunnableCallback) {
 	r.callbacksMu.Lock()
 	defer r.callbacksMu.Unlock()
@@ -34,7 +38,7 @@ func (r *RunnableController) Start() {
 		return
 	}
 	r.RunnableObject.Start()
-	callAll(r.callbacks, Started)
+	r.callAll(Started)
 }
 
 func (r *RunnableController) Stop() {
@@ -44,7 +48,7 @@ func (r *RunnableController) Stop() {
 		return
 	}
 	r.RunnableObject.Stop()
-	callAll(r.callbacks, Stopped)
+	r.callAll(Stopped)
 }
 
 func (r *RunnableController) Running() bool {
@@ -56,8 +60,8 @@ func (r *RunnableController) Running() bool {
 	return false
 }
 
-func callAll(fns []RunnableCallback, et RunnableEventType) {
-	for _, fn := range fns {
+func (r *RunnableController) callAll(et RunnableEventType) {
+	for _, fn := range r.callbacks {
 		if fn != nil {
 			fn(et)
 		}

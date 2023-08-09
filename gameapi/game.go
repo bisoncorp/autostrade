@@ -21,6 +21,11 @@ type Colorable interface {
 	SetColor(color.Color)
 }
 
+type Speedable interface {
+	Speed() float64
+	SetSpeed(float64)
+}
+
 type Position struct {
 	X, Y float64
 }

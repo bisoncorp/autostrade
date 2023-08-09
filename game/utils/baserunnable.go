@@ -36,8 +36,10 @@ func (b *baseRunnable) Start() {
 }
 
 func (b *baseRunnable) Stop() {
-	b.stopCh <- struct{}{}
-	b.running.Store(false)
+	if b.Running() {
+		b.stopCh <- struct{}{}
+		b.running.Store(false)
+	}
 }
 
 func (b *baseRunnable) Running() bool {
