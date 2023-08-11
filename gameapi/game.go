@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"io"
 	"math"
-	"os"
 )
 
 type Runnable interface {
@@ -97,39 +97,19 @@ func Distance(p1, p2 Position) float64 {
 	return math.Sqrt(dx*dx + dy*dy)
 }
 
-func WriteSimulationData(data SimulationData, path string) {
-	file, err := os.Create(path)
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	if err != nil {
-		panic(err)
-	}
-	enc := json.NewEncoder(file)
+func WriteSimulationData(data SimulationData, writer io.Writer) {
+	enc := json.NewEncoder(writer)
 	enc.SetIndent("", "\t")
-	err = enc.Encode(data)
+	err := enc.Encode(data)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func ReadSimulationData(path string) SimulationData {
-	file, err := os.Open(path)
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	if err != nil {
-		panic(err)
-	}
-	enc := json.NewDecoder(file)
+func ReadSimulationData(reader io.Reader) SimulationData {
+	enc := json.NewDecoder(reader)
 	data := SimulationData{}
-	err = enc.Decode(&data)
+	err := enc.Decode(&data)
 	if err != nil {
 		panic(err)
 	}

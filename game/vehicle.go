@@ -10,10 +10,10 @@ type vehicle struct {
 	api.VehicleData
 	propertyMu sync.RWMutex
 
-	trip []string
+	trip api.Trip
 }
 
-func newVehicle(data api.VehicleData, trip []string) *vehicle {
+func newVehicle(data api.VehicleData, trip api.Trip) *vehicle {
 	return &vehicle{VehicleData: data, trip: trip}
 }
 
@@ -37,7 +37,6 @@ func (v *vehicle) Progress() float64 {
 	defer v.propertyMu.RUnlock()
 	return v.VehicleData.Progress
 }
-
 func (v *vehicle) PreferredSpeed() float64 {
 	v.propertyMu.RLock()
 	defer v.propertyMu.RUnlock()
@@ -47,6 +46,9 @@ func (v *vehicle) SetPreferredSpeed(f float64) {
 	v.propertyMu.Lock()
 	defer v.propertyMu.Unlock()
 	v.VehicleData.PreferredSpeed = f
+}
+func (v *vehicle) Trip() api.Trip {
+	return v.trip
 }
 
 func colorToRgba(c color.Color) color.RGBA {

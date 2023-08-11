@@ -22,4 +22,6 @@ type Vehicle interface {
 	PreferredSpeed() float64
 	// SetPreferredSpeed set speed of the vehicle, the speed is capped to Road().MaxSpeed()
 	SetPreferredSpeed(float64)
+
+	Trip() Trip
 }

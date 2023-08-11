@@ -21,6 +21,7 @@ type City interface {
 
 	// Position of the city
 	Position() Position
+	SetPosition(Position)
 
 	// GenerationTime is the time for city to generate a vehicle
 	GenerationTime() time.Duration
@@ -31,6 +32,9 @@ type City interface {
 	ProcessingTime() time.Duration
 	// SetProcessingTime set consume time
 	SetProcessingTime(time.Duration)
+
+	RoadsIn() []Road
+	RoadsOut() []Road
 
 	Runnable
 }

@@ -5,40 +5,43 @@ import (
 	"sync/atomic"
 )
 
-type updater interface {
-	update()
+type Updater interface {
+	Update(iteration uint64)
 }
 
 type baseRunnable struct {
 	stopCh  chan struct{}
 	running atomic.Bool
-	impl    updater
+	impl    Updater
 }
 
-func NewBaseRunnable(impl updater) gameapi.Runnable {
+func NewBaseRunnable(impl Updater) gameapi.Runnable {
 	return &baseRunnable{stopCh: make(chan struct{}), impl: impl}
 }
 
 func (b *baseRunnable) Start() {
 	shouldStart := b.running.CompareAndSwap(false, true)
-	if fn := b.impl.update; shouldStart {
-		go func() {
-			for {
-				select {
-				case <-b.stopCh:
-					return
-				default:
-				}
-				fn()
-			}
-		}()
+	if !shouldStart {
+		return
 	}
+	go func() {
+		iteration := uint64(0)
+		for {
+			select {
+			case <-b.stopCh:
+				return
+			default:
+			}
+			b.impl.Update(iteration)
+			iteration++
+		}
+	}()
 }
 
 func (b *baseRunnable) Stop() {
-	if b.Running() {
+	shouldStop := b.running.CompareAndSwap(true, false)
+	if shouldStop {
 		b.stopCh <- struct{}{}
-		b.running.Store(false)
 	}
 }
 

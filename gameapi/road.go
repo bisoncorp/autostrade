@@ -10,9 +10,9 @@ type Road interface {
 	// SetMaxSpeed set maximum speed
 	SetMaxSpeed(float64)
 
+	Vehicles() []Vehicle
 	Src() City
 	Dst() City
 
-	Vehicles() []Vehicle
 	Runnable
 }

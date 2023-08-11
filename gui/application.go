@@ -3,29 +3,27 @@ package gui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"github.com.bisoncorp.autostrade/game"
 	api "github.com.bisoncorp.autostrade/gameapi"
 )
 
 type Application struct {
-	appl       fyne.App
-	wind       fyne.Window
-	simulation api.Simulation
+	appl fyne.App
 }
 
 func NewApplication() *Application {
 	a := &Application{}
 	a.appl = app.NewWithID("github.com.bisoncorp.autostrade")
-	a.wind = a.appl.NewWindow("Autostrade")
-	a.simulation = game.NewFromData(api.ReadSimulationData("schema.json"))
-
-	ui, menu := buildSimulationUi(a.simulation, a.wind)
-	a.wind.SetContent(ui)
-	a.wind.SetMainMenu(menu)
-
 	return a
 }
 
-func (a *Application) ShowAndRun() {
-	a.wind.ShowAndRun()
+func (a *Application) Run() {
+	a.appl.Run()
+}
+
+func (a *Application) NewWindow(sim api.Simulation) {
+	wind := a.appl.NewWindow("Simulation")
+	ui, menu := buildSimulationUi(sim, wind, a)
+	wind.SetContent(ui)
+	wind.SetMainMenu(menu)
+	wind.Show()
 }

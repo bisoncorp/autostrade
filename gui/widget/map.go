@@ -46,7 +46,6 @@ func (m *Map) Stop() {
 
 func (m *Map) run() {
 	go func() {
-
 		for {
 			<-m.simulationTicker.C
 			if m.OnDataRequired != nil {
@@ -136,7 +135,7 @@ func (m *mapRenderer) MinSize() fyne.Size {
 	return minSize
 }
 func (m *mapRenderer) Objects() []fyne.CanvasObject {
-	objs := make([]fyne.CanvasObject, 0, len(m.roads)+len(m.cities))
+	objs := make([]fyne.CanvasObject, 0, len(m.roads)+len(m.cities)+len(m.vehicles))
 	objs = append(objs, m.roads...)
 	objs = append(objs, m.vehicles...)
 	objs = append(objs, m.cities...)

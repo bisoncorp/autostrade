@@ -16,27 +16,22 @@ type city struct {
 
 	api.Runnable
 
-	generateTrip                       func(src string, vSpeed float64) []string
+	parentSimulation                   *simulation
 	entryQueue                         *utils.UnboundedChan[vehicle]
 	generationTicker, processingTicker *time.Ticker
-	roads                              []*road
+	roadsOut, roadsIn                  []*road
+	roadsMu                            sync.RWMutex
 }
 
-func (c *city) Links() []graph.Link {
-	links := make([]graph.Link, len(c.roads))
-	for i := range links {
-		links[i] = c.roads[i]
-	}
-	return links
-}
-
-func newCity(data api.CityData, generateTrip func(string, float64) []string) *city {
+func newCity(data api.CityData, parentSimulation *simulation) *city {
 	c := &city{
 		CityData:         data,
-		generateTrip:     generateTrip,
+		parentSimulation: parentSimulation,
 		entryQueue:       utils.NewUnboundedChan[vehicle](),
 		generationTicker: time.NewTicker(data.GenerationTime),
 		processingTicker: time.NewTicker(data.ProcessingTime),
+		roadsIn:          make([]*road, 0),
+		roadsOut:         make([]*road, 0),
 	}
 	c.Runnable = utils.NewBaseRunnable(c)
 	return c
@@ -45,29 +40,75 @@ func newCity(data api.CityData, generateTrip func(string, float64) []string) *ci
 func (c *city) enqueue(v *vehicle) {
 	c.entryQueue.In() <- v
 }
-
 func (c *city) route(v *vehicle) {
-	if len(v.trip) == 0 {
+	if v.trip.Arrived() {
 		return
 	}
-	next := v.trip[0]
-	v.trip = v.trip[1:]
-	for _, r := range c.roads {
-		if dst := r.dst; dst.Name() == next {
-			r.enqueue(v)
+	v.trip.Next()
+	c.roadsMu.RLock()
+	defer c.roadsMu.RUnlock()
+	for _, r := range c.roadsOut {
+		if r.Dst().Name() == v.trip.Current().Name() {
+			r.route(v)
+			return
 		}
 	}
 }
 
-func (c *city) update() {
+func (c *city) addRoadIn(r *road) {
+	c.roadsMu.Lock()
+	defer c.roadsMu.Unlock()
+	for _, r2 := range c.roadsIn {
+		if r == r2 {
+			return
+		}
+	}
+	c.roadsIn = append(c.roadsIn, r)
+}
+func (c *city) remRoadIn(r *road) {
+	c.roadsMu.Lock()
+	defer c.roadsMu.Unlock()
+	for index, r2 := range c.roadsIn {
+		if r == r2 {
+			c.roadsIn = append(c.roadsIn[:index], c.roadsIn[index+1:]...)
+			return
+		}
+	}
+}
+func (c *city) addRoadOut(r *road) {
+	c.roadsMu.Lock()
+	defer c.roadsMu.Unlock()
+	for _, r2 := range c.roadsOut {
+		if r == r2 {
+			return
+		}
+	}
+	c.roadsOut = append(c.roadsOut, r)
+}
+func (c *city) remRoadOut(r *road) {
+	c.roadsMu.Lock()
+	defer c.roadsMu.Unlock()
+	for index, r2 := range c.roadsOut {
+		if r == r2 {
+			c.roadsOut = append(c.roadsOut[:index], c.roadsOut[index+1:]...)
+			return
+		}
+	}
+}
+func (c *city) generateVehicle() *vehicle {
+	pSpeed := float64(80 + rand.Intn(500))
+	v := newVehicle(api.VehicleData{
+		Plate:          c.parentSimulation.generatePlate(),
+		Color:          colorToRgba(c.Color()),
+		PreferredSpeed: pSpeed,
+	}, c.parentSimulation.generateTrip(c.Name(), pSpeed))
+	return v
+}
+
+func (c *city) Update(uint64) {
 	select {
 	case <-c.generationTicker.C:
-		pSpeed := float64(80 + rand.Intn(500))
-		v := newVehicle(api.VehicleData{
-			Plate:          <-plateCh,
-			Color:          colorToRgba(c.Color()),
-			PreferredSpeed: pSpeed,
-		}, c.generateTrip(c.Name(), pSpeed))
+		v := c.generateVehicle()
 		c.route(v)
 	case <-c.processingTicker.C:
 		select {
@@ -84,7 +125,6 @@ func (c *city) Name() string {
 func (c *city) Color() color.Color {
 	c.propertyMu.RLock()
 	defer c.propertyMu.RUnlock()
-
 	return c.CityData.Color
 }
 func (c *city) SetColor(col color.Color) {
@@ -93,8 +133,6 @@ func (c *city) SetColor(col color.Color) {
 	c.CityData.Color = colorToRgba(col)
 }
 func (c *city) Position() api.Position {
-	c.propertyMu.RLock()
-	defer c.propertyMu.RUnlock()
 	return c.CityData.Pos
 }
 func (c *city) SetPosition(position api.Position) {
@@ -123,4 +161,30 @@ func (c *city) SetProcessingTime(duration time.Duration) {
 	defer c.propertyMu.Unlock()
 	c.CityData.ProcessingTime = duration
 	c.processingTicker.Reset(duration)
+}
+func (c *city) RoadsIn() []api.Road {
+	c.roadsMu.RLock()
+	defer c.roadsMu.RUnlock()
+	rs := make([]api.Road, len(c.roadsIn))
+	for i := 0; i < len(c.roadsIn); i++ {
+		rs[i] = c.roadsIn[i]
+	}
+	return rs
+}
+func (c *city) RoadsOut() []api.Road {
+	c.roadsMu.RLock()
+	defer c.roadsMu.RUnlock()
+	rs := make([]api.Road, len(c.roadsOut))
+	for i := 0; i < len(c.roadsOut); i++ {
+		rs[i] = c.roadsIn[i]
+	}
+	return rs
+}
+
+func (c *city) Links() []graph.Link {
+	links := make([]graph.Link, len(c.roadsOut))
+	for i := range links {
+		links[i] = c.roadsOut[i]
+	}
+	return links
 }

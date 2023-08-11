@@ -23,6 +23,7 @@ type Simulation interface {
 	RemoveRoad(Road)
 
 	City(name string) City
+	Road(a, b string) (atob, btoa Road)
 	Vehicle(plate string) Vehicle
 
 	PackData() SimulationData

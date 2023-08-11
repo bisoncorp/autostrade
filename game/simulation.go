@@ -1,92 +1,126 @@
 package game
 
 import (
+	"fmt"
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/graph"
 	"github.com.bisoncorp.autostrade/graph/dijkstra"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 )
 
 type simulation struct {
 	speed      float64
 	propertyMu sync.RWMutex
-	apiMu      sync.Mutex
-	cities     []*city
-	cityMap    map[string]int
-	running    bool
+
+	lastPlateCh <-chan api.Plate
+	nextPlateCh <-chan api.Plate
+
+	cities   []*city
+	cityMap  map[string]int
+	citiesMu sync.RWMutex
+
+	roads   []*road
+	roadMap map[string]int
+	roadsMu sync.RWMutex
+
+	running atomic.Bool
 }
 
-func newSimulation(speed float64) *simulation {
-	return &simulation{
-		speed:   speed,
+func newSimulation(data api.SimulationData) *simulation {
+	s := &simulation{
+		speed:   data.Speed,
 		cities:  make([]*city, 0),
 		cityMap: make(map[string]int),
+		roads:   make([]*road, 0),
+		roadMap: make(map[string]int),
 	}
+
+	cityHook := make([]api.City, len(data.Cities))
+	for i := 0; i < len(data.Cities); i++ {
+		cityHook[i] = s.AddCity(data.Cities[i])
+	}
+	for i := 0; i < len(data.Roads); i++ {
+		rd := data.Roads[i]
+		s.AddOneWayRoad(cityHook[rd.SrcIndex], cityHook[rd.DstIndex], rd.RoadData)
+	}
+	s.startPlateGenerator(data.LastPlate)
+	return s
 }
 
-func (s *simulation) Nodes() []graph.Node {
-	nodes := make([]graph.Node, len(s.cities))
-	for i := range nodes {
-		nodes[i] = s.cities[i]
-	}
-	return nodes
+func (s *simulation) cityIndex(name string) int {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	return s.cityMap[name]
 }
-
-func (s *simulation) generateTrip(cityName string, speed float64) []string {
-	srcIndex, dstIndex := s.cityMap[cityName], 0
+func (s *simulation) generateTrip(src string, _ float64) api.Trip {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	srcIndex, dstIndex := s.cityIndex(src), -1
+	maxIndex := len(s.cities)
 	for {
-		dstIndex = rand.Intn(len(s.cities))
+		dstIndex = rand.Intn(maxIndex)
 		if srcIndex != dstIndex {
 			break
 		}
 	}
-	path := dijkstra.ShortestPath(s, srcIndex, dstIndex)[1:]
-	pathString := make([]string, len(path))
-	for i, index := range path {
-		pathString[i] = s.cities[index].Name()
+	path := dijkstra.ShortestPath(s, srcIndex, dstIndex)
+	cities := make([]api.City, len(path))
+	for i := 0; i < len(path); i++ {
+		cities[i] = s.cities[path[i]]
 	}
-	return pathString
+	return api.NewTrip(cities)
 }
-
-func (s *simulation) cityIndex(name string) int {
-	return s.cityMap[name]
+func (s *simulation) generatePlate() string {
+	return (<-s.nextPlateCh).String()
+}
+func (s *simulation) startPlateGenerator(initialPlate api.Plate) {
+	nextPlateCh, lastPlateCh := make(chan api.Plate, 16), make(chan api.Plate)
+	s.nextPlateCh, s.lastPlateCh = nextPlateCh, lastPlateCh
+	go func() {
+		plate := initialPlate
+		for {
+			select {
+			case nextPlateCh <- plate:
+				plate = plate.Next()
+			case lastPlateCh <- plate:
+			}
+		}
+	}()
 }
 
 func (s *simulation) AddCity(data api.CityData) api.City {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
+	s.citiesMu.Lock()
+	defer s.citiesMu.Unlock()
+
 	if _, exist := s.cityMap[data.Name]; exist {
 		return nil
 	}
-	c := newCity(data, func(cityName string, vSpeed float64) []string { return s.generateTrip(cityName, vSpeed) })
+
+	c := newCity(data, s)
 	s.cityMap[data.Name] = len(s.cities)
 	s.cities = append(s.cities, c)
 	return c
 }
+func (s *simulation) RemoveCity(c api.City) {
+	s.citiesMu.Lock()
+	defer s.citiesMu.Unlock()
 
-func (s *simulation) RemoveCity(city api.City) {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	index, exist := s.cityMap[city.Name()]
+	index, exist := s.cityMap[c.Name()]
 	if !exist {
 		return
 	}
 	city0 := s.cities[index]
+
+	roadsIn := city0.RoadsIn()
+	roadsOut := city0.RoadsOut()
+	roads := append(roadsIn, roadsOut...)
 	city0.Stop()
-	for _, r := range city0.roads {
-		r.Stop()
+	for _, r := range roads {
+		s.RemoveRoad(r)
 	}
-	for _, c := range s.cities {
-		if c.Name() == city0.Name() {
-			continue
-		}
-		for _, r := range c.roads {
-			if r.dst.Name() == city0.Name() {
-				s.RemoveRoad(r)
-			}
-		}
-	}
+
 	for k, v := range s.cityMap {
 		if v > index {
 			s.cityMap[k] = v - 1
@@ -100,78 +134,143 @@ func (s *simulation) AddRoad(a, b api.City, data api.RoadData) (atob api.Road, b
 	btoa = s.AddOneWayRoad(b, a, data)
 	return
 }
-
 func (s *simulation) AddOneWayRoad(src, dst api.City, data api.RoadData) api.Road {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	src0, ok := src.(*city)
-	if !ok {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	indexSrc, existSrc := s.cityMap[src.Name()]
+	indexDst, existDst := s.cityMap[dst.Name()]
+	if !existSrc || !existDst {
 		return nil
 	}
-	dst0, ok := dst.(*city)
-	if !ok {
-		return nil
-	}
-	for _, r := range src0.roads {
-		if r.dst.Name() == dst0.Name() {
-			return nil
-		}
-	}
-	r := newRoad(data, func(name string) int { return s.cityIndex(name) }, func() float64 { return s.Speed() }, src0, dst0)
+	src0, dst0 := s.cities[indexSrc], s.cities[indexDst]
 
-	if src0.Running() {
-		src0.Stop()
-		defer src0.Start()
+	s.roadsMu.Lock()
+	defer s.roadsMu.Unlock()
+
+	name := roadName(src0.Name(), dst0.Name())
+	_, existRoad := s.roadMap[name]
+	if existRoad {
+		return nil
 	}
-	src0.roads = append(src0.roads, r)
+
+	r := newRoad(data, s, src0, dst0)
+	src0.addRoadOut(r)
+	dst0.addRoadIn(r)
+
+	s.roadMap[name] = len(s.roads)
+	s.roads = append(s.roads, r)
 	return r
 }
-
 func (s *simulation) RemoveRoad(r api.Road) {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	r0, ok := r.(*road)
-	if !ok {
+	s.roadsMu.Lock()
+	defer s.roadsMu.Unlock()
+	name := roadName(r.Src().Name(), r.Dst().Name())
+	index, existRoad := s.roadMap[name]
+	if !existRoad {
 		return
 	}
 
-	src := r0.src
+	r0 := s.roads[index]
 	r0.Stop()
-	if src.Running() {
-		src.Stop()
-		defer src.Start()
-	}
-	for i, cr := range src.roads {
-		if cr.dst.Name() == r0.dst.Name() {
-			src.roads = append(src.roads[:i], src.roads[i+1:]...)
-			break
+	r0.Src().(*city).remRoadOut(r0)
+	r0.Dst().(*city).remRoadIn(r0)
+
+	for k, v := range s.roadMap {
+		if v > index {
+			s.roadMap[k] = v - 1
 		}
 	}
+	s.roads = append(s.roads[:index], s.roads[index+1:]...)
 }
 
 func (s *simulation) City(name string) api.City {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
 	if i, exist := s.cityMap[name]; exist {
 		return s.cities[i]
 	}
 	return nil
 }
-
+func (s *simulation) Road(a, b string) (atob, btoa api.Road) {
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
+	atobString, btoaString := roadName(a, b), roadName(b, a)
+	if index, exist := s.roadMap[atobString]; exist {
+		atob = s.roads[index]
+	}
+	if index, exist := s.roadMap[btoaString]; exist {
+		btoa = s.roads[index]
+	}
+	return
+}
 func (s *simulation) Vehicle(plate string) api.Vehicle {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	for _, c := range s.cities {
-		for _, r := range c.roads {
-			vehicles := r.Vehicles()
-			for _, v := range vehicles {
-				if v.Plate() == plate {
-					return v
-				}
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
+	for _, r := range s.roads {
+		vehicles := r.Vehicles()
+		for _, v := range vehicles {
+			if v.Plate() == plate {
+				return v
 			}
 		}
 	}
 	return nil
+}
+
+func (s *simulation) PackData() api.SimulationData {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
+
+	data := api.SimulationData{
+		Speed:     s.Speed(),
+		LastPlate: <-s.lastPlateCh,
+		Cities:    make([]api.CityData, 0, len(s.cities)),
+		Roads: make([]struct {
+			api.RoadData
+			SrcIndex, DstIndex int
+		}, 0),
+		Vehicles: make([]struct {
+			api.VehicleData
+			RoadIndex int
+		}, 0),
+	}
+
+	for _, c := range s.cities {
+		c.propertyMu.RLock()
+		cd := c.CityData
+		c.propertyMu.RUnlock()
+		data.Cities = append(data.Cities, cd)
+	}
+
+	for _, r := range s.roads {
+		srcName, dstName := r.Src().Name(), r.Dst().Name()
+		srcIndex, dstIndex := s.cityMap[srcName], s.cityMap[dstName]
+		r.propertyMu.RLock()
+		rd := r.RoadData
+		r.propertyMu.RUnlock()
+		roadIndex := s.roadMap[roadName(srcName, dstName)]
+		data.Roads = append(data.Roads, struct {
+			api.RoadData
+			SrcIndex, DstIndex int
+		}{RoadData: rd, SrcIndex: srcIndex, DstIndex: dstIndex})
+		r.vehiclesMu.RLock()
+		vehicles := make([]*vehicle, len(r.vehicles))
+		copy(vehicles, r.vehicles)
+		r.vehiclesMu.RUnlock()
+		for _, v := range vehicles {
+			v.propertyMu.RLock()
+			vd := v.VehicleData
+			v.propertyMu.RUnlock()
+			data.Vehicles = append(data.Vehicles, struct {
+				api.VehicleData
+				RoadIndex int
+			}{VehicleData: vd, RoadIndex: roadIndex})
+		}
+	}
+
+	return data
 }
 
 func (s *simulation) Speed() float64 {
@@ -185,81 +284,52 @@ func (s *simulation) SetSpeed(speed float64) {
 	s.speed = speed
 }
 
-func (s *simulation) PackData() api.SimulationData {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	data := api.SimulationData{
-		Speed:  s.Speed(),
-		Cities: make([]api.CityData, 0, len(s.cities)),
-		Roads: make([]struct {
-			api.RoadData
-			SrcIndex, DstIndex int
-		}, 0),
-		Vehicles: make([]struct {
-			api.VehicleData
-			RoadIndex int
-		}, 0),
-	}
-
-	cityMap := make(map[string]int)
-	for _, c := range s.cities {
-		c.propertyMu.RLock()
-		cd := c.CityData
-		c.propertyMu.RUnlock()
-		cityMap[cd.Name] = len(data.Cities)
-		data.Cities = append(data.Cities, cd)
-	}
-
-	for _, c := range s.cities {
-		for _, r := range c.roads {
-			srcName := c.Name()
-			dstName := r.dst.Name()
-			r.propertyMu.RLock()
-			rd := r.RoadData
-			r.propertyMu.RUnlock()
-			index := len(data.Roads)
-			data.Roads = append(data.Roads, struct {
-				api.RoadData
-				SrcIndex, DstIndex int
-			}{RoadData: rd, SrcIndex: cityMap[srcName], DstIndex: cityMap[dstName]})
-			for _, v := range r.vehicles {
-				v.propertyMu.RLock()
-				vd := v.VehicleData
-				v.propertyMu.RUnlock()
-				data.Vehicles = append(data.Vehicles, struct {
-					api.VehicleData
-					RoadIndex int
-				}{VehicleData: vd, RoadIndex: index})
-			}
-		}
-	}
-	return data
-}
-
 func (s *simulation) Start() {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
+	shouldStart := s.running.CompareAndSwap(false, true)
+	if !shouldStart {
+		return
+	}
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
 	for _, c := range s.cities {
-		for _, r := range c.roads {
-			r.Start()
-		}
 		c.Start()
 	}
-	s.running = true
+	for _, r := range s.roads {
+		r.Start()
+	}
 }
 func (s *simulation) Stop() {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
+	shouldStop := s.running.CompareAndSwap(true, false)
+	if !shouldStop {
+		return
+	}
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
 	for _, c := range s.cities {
 		c.Stop()
-		for _, r := range c.roads {
-			r.Stop()
-		}
 	}
-	s.running = false
+	for _, r := range s.roads {
+		r.Stop()
+	}
 }
 func (s *simulation) Running() bool {
-	s.apiMu.Lock()
-	defer s.apiMu.Unlock()
-	return s.running
+	return s.running.Load()
+}
+
+func (s *simulation) Nodes() []graph.Node {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	nodes := make([]graph.Node, len(s.cities))
+	for i := range nodes {
+		nodes[i] = s.cities[i]
+	}
+	return nodes
+}
+
+func roadName(a, b string) string {
+	return fmt.Sprintf("%s-%s", a, b)
 }
