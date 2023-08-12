@@ -52,6 +52,9 @@ func (v *vehicle) Trip() api.Trip {
 	return v.trip
 }
 func (v *vehicle) Road() api.Road {
+	if v.currentRoad == nil {
+		return nil
+	}
 	return v.currentRoad
 }
 

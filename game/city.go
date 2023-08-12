@@ -41,6 +41,12 @@ func (c *city) enqueue(v *vehicle) {
 	c.entryQueue.In() <- v
 }
 func (c *city) route(v *vehicle) {
+	despawned := true
+	defer func() {
+		if despawned {
+			c.parentSimulation.listener.VehicleDespawned(v)
+		}
+	}()
 	if v.trip.Arrived() {
 		return
 	}
@@ -49,6 +55,7 @@ func (c *city) route(v *vehicle) {
 	defer c.roadsMu.RUnlock()
 	for _, r := range c.roadsOut {
 		if r.Dst().Name() == v.trip.Current().Name() {
+			despawned = false
 			r.route(v)
 			return
 		}
@@ -102,6 +109,7 @@ func (c *city) generateVehicle() *vehicle {
 		Color:          colorToRgba(c.Color()),
 		PreferredSpeed: pSpeed,
 	}, c.parentSimulation.generateTrip(c.Name(), pSpeed))
+	c.parentSimulation.listener.VehicleSpawned(v)
 	return v
 }
 

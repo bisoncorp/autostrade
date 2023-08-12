@@ -4,7 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/widget"
 	api "github.com.bisoncorp.autostrade/gameapi"
-	"github.com.bisoncorp.autostrade/set"
+	"image/color"
 	"sync"
 )
 
@@ -21,28 +21,115 @@ type Map struct {
 
 	OnCityTapped    func(api.City)
 	OnVehicleTapped func(api.Vehicle)
-	OnTapped        func(*fyne.PointEvent)
+	OnTapped        func(fyne.Position)
 
 	MapSize fyne.Size
 
-	SimulationHook api.Simulation
+	cities          map[api.City]*City
+	citiesMu        sync.RWMutex
+	citiesChanged   bool
+	roads           map[api.Road]*Road
+	roadsMu         sync.RWMutex
+	roadsChanged    bool
+	vehicles        map[api.Vehicle]*Vehicle
+	vehiclesMu      sync.RWMutex
+	vehiclesChanged bool
+	simulationHook  api.Simulation
 }
 
-func NewMap() *Map {
-	m := &Map{}
+func NewMap(sim api.Simulation) *Map {
+	m := &Map{
+		cities:         make(map[api.City]*City),
+		roads:          make(map[api.Road]*Road),
+		vehicles:       make(map[api.Vehicle]*Vehicle),
+		simulationHook: sim,
+	}
 	m.ExtendBaseWidget(m)
+	cities := sim.Cities()
+	for _, city := range cities {
+		m.CityAdded(city)
+	}
+	roads := sim.Roads()
+	for _, road := range roads {
+		m.RoadAdded(road)
+		vehicles := road.Vehicles()
+		for _, vehicle := range vehicles {
+			m.VehicleSpawned(vehicle)
+		}
+	}
 	return m
+}
+
+func (m *Map) ColorRoads(roads []api.Road, col color.Color) {
+	m.roadsMu.RLock()
+	defer m.roadsMu.RUnlock()
+	for _, road := range roads {
+		obj, exist := m.roads[road]
+		if !exist {
+			continue
+		}
+		obj.line.StrokeColor = col
+	}
+}
+
+func (m *Map) CityAdded(city api.City) {
+	m.citiesMu.Lock()
+	m.citiesChanged = true
+	m.cities[city] = NewCity(city, m.callOnCityTapped)
+	m.citiesMu.Unlock()
+	m.Refresh()
+}
+func (m *Map) CityRemoved(city api.City) {
+	m.citiesMu.Lock()
+	m.citiesChanged = true
+	delete(m.cities, city)
+	m.citiesMu.Unlock()
+	m.Refresh()
+}
+
+func (m *Map) RoadAdded(road api.Road) {
+	m.roadsMu.Lock()
+	m.roadsChanged = true
+	m.roads[road] = NewRoad(road)
+	m.roadsMu.Unlock()
+	m.Refresh()
+}
+func (m *Map) RoadRemoved(road api.Road) {
+	m.roadsMu.Lock()
+	m.roadsChanged = true
+	delete(m.roads, road)
+	m.roadsMu.Unlock()
+	m.Refresh()
+}
+
+func (m *Map) VehicleSpawned(vehicle api.Vehicle) {
+	m.vehiclesMu.Lock()
+	m.vehiclesChanged = true
+	m.vehicles[vehicle] = NewVehicle(vehicle, m.callOnVehicleTapped)
+	m.vehiclesMu.Unlock()
+	m.Refresh()
+}
+func (m *Map) VehicleDespawned(vehicle api.Vehicle) {
+	m.vehiclesMu.Lock()
+	m.vehiclesChanged = true
+	delete(m.vehicles, vehicle)
+	m.vehiclesMu.Unlock()
+	m.Refresh()
 }
 
 func (m *Map) SetSize(Size fyne.Size) {
 	m.MapSize = Size
 	m.Refresh()
 }
-
 func (m *Map) Tapped(event *fyne.PointEvent) {
-	m.callOnTapped(event)
+	size := m.Size()
+	minSize := m.MinSize()
+	scaleX, scaleY := size.Width/minSize.Width, size.Height/minSize.Height
+	descalePosition := func(position fyne.Position) fyne.Position {
+		return fyne.NewPos(position.X/scaleX, position.Y/scaleY)
+	}
+	m.callOnTapped(descalePosition(event.Position))
 }
-
 func (m *Map) MinSize() fyne.Size {
 	return m.MapSize
 }
@@ -57,9 +144,9 @@ func (m *Map) callOnVehicleTapped(hook api.Vehicle) {
 		m.OnVehicleTapped(hook)
 	}
 }
-func (m *Map) callOnTapped(event *fyne.PointEvent) {
+func (m *Map) callOnTapped(position fyne.Position) {
 	if m.OnTapped != nil {
-		m.OnTapped(event)
+		m.OnTapped(position)
 	}
 }
 
@@ -88,7 +175,7 @@ func (m *mapRenderer) Layout(size fyne.Size) {
 	scalePosition := func(position fyne.Position) fyne.Position {
 		return fyne.NewPos(position.X*scaleX, position.Y*scaleY)
 	}
-	scaleSize := func(size fyne.Size) fyne.Size {
+	_ = func(size fyne.Size) fyne.Size {
 		return fyne.NewSize(size.Width*scaleX, size.Height*scaleY)
 	}
 	citySize := cityMinSize()
@@ -107,12 +194,15 @@ func (m *mapRenderer) Layout(size fyne.Size) {
 	for _, object := range m.roads {
 		road := object.(*Road)
 		hook := road.hook
-		road.Resize(scaleSize(road.MinSize()))
-		road.Move(hook.Src().Position().ToPos32())
+		road.line.Position1 = scalePosition(hook.Src().Position().ToPos32())
+		road.line.Position2 = scalePosition(hook.Dst().Position().ToPos32())
 	}
 
 	// Vehicles
 	for _, object := range m.vehicles {
+		if object.(*Vehicle).hook.Road() == nil {
+			continue
+		}
 		vehicle := object.(*Vehicle)
 		hook := vehicle.hook
 		vehicle.Resize(vehicleSize)
@@ -134,54 +224,49 @@ func (m *mapRenderer) Objects() []fyne.CanvasObject {
 }
 func (m *mapRenderer) Refresh() {
 	m.mutex.Lock()
-	needHover := set.New[string]()
-	for _, object := range m.cities {
-		if city := object.(*City); city.hover {
-			needHover.Insert(city.hook.Name())
-		}
-	}
-	for _, object := range m.vehicles {
-		if vehicle := object.(*Vehicle); vehicle.hover {
-			needHover.Insert(vehicle.hook.Plate())
-		}
-	}
 
-	if m.wid.SimulationHook == nil {
-		m.mutex.Unlock()
-		return
-	}
-
-	citiesHooks := m.wid.SimulationHook.Cities()
-	m.cities = make([]fyne.CanvasObject, len(citiesHooks))
-	for i := 0; i < len(citiesHooks); i++ {
-		city := NewCity(citiesHooks[i], m.wid.callOnCityTapped)
-		if needHover.Has(citiesHooks[i].Name()) {
-			city.hover = true
-			city.Refresh()
+	m.wid.citiesMu.RLock()
+	if m.wid.citiesChanged {
+		m.cities = make([]fyne.CanvasObject, 0, len(m.wid.cities))
+		for _, object := range m.wid.cities {
+			m.cities = append(m.cities, object)
 		}
-		m.cities[i] = city
+		m.wid.citiesChanged = false
 	}
+	m.wid.citiesMu.RUnlock()
 
-	roadsHooks := m.wid.SimulationHook.Roads()
-	m.roads = make([]fyne.CanvasObject, len(roadsHooks))
-	for i := 0; i < len(roadsHooks); i++ {
-		m.roads[i] = NewRoad(roadsHooks[i])
-	}
-
-	vehiclesHooks := make([]api.Vehicle, 0, 4000)
-	for _, hook := range roadsHooks {
-		vehiclesHooks = append(vehiclesHooks, hook.Vehicles()...)
-	}
-	m.vehicles = make([]fyne.CanvasObject, len(vehiclesHooks))
-	for i := 0; i < len(vehiclesHooks); i++ {
-		vehicle := NewVehicle(vehiclesHooks[i], m.wid.callOnVehicleTapped)
-		if needHover.Has(vehiclesHooks[i].Plate()) {
-			vehicle.hover = true
-			vehicle.Refresh()
+	m.wid.roadsMu.RLock()
+	if m.wid.roadsChanged {
+		m.roads = make([]fyne.CanvasObject, 0, len(m.wid.roads))
+		for _, object := range m.wid.roads {
+			m.roads = append(m.roads, object)
 		}
-		m.vehicles[i] = vehicle
+		m.wid.roadsChanged = false
 	}
+	m.wid.roadsMu.RUnlock()
+
+	m.wid.vehiclesMu.RLock()
+	if m.wid.vehiclesChanged {
+		m.vehicles = make([]fyne.CanvasObject, 0, len(m.wid.vehicles))
+		for _, object := range m.wid.vehicles {
+			m.vehicles = append(m.vehicles, object)
+		}
+		m.wid.vehiclesChanged = false
+	}
+	m.wid.vehiclesMu.RUnlock()
+
 	m.mutex.Unlock()
+
+	for _, city := range m.cities {
+		city.Refresh()
+	}
+	for _, road := range m.roads {
+		road.Refresh()
+	}
+	for _, vehicle := range m.vehicles {
+		vehicle.Refresh()
+	}
+
 	m.Layout(m.wid.Size())
 }
 

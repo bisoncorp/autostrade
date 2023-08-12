@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"github.com.bisoncorp.autostrade/game/utils"
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/graph"
 	"github.com.bisoncorp.autostrade/graph/dijkstra"
@@ -25,16 +26,19 @@ type simulation struct {
 	roadMap map[string]int
 	roadsMu sync.RWMutex
 
+	listener *utils.SafeListener
+
 	running atomic.Bool
 }
 
 func newSimulation(data api.SimulationData) *simulation {
 	s := &simulation{
-		speed:   data.Speed,
-		cities:  make([]*city, 0),
-		cityMap: make(map[string]int),
-		roads:   make([]*road, 0),
-		roadMap: make(map[string]int),
+		speed:    data.Speed,
+		cities:   make([]*city, 0),
+		cityMap:  make(map[string]int),
+		roads:    make([]*road, 0),
+		roadMap:  make(map[string]int),
+		listener: &utils.SafeListener{},
 	}
 
 	cityHook := make([]api.City, len(data.Cities))
@@ -65,12 +69,18 @@ func (s *simulation) generateTrip(src string, _ float64) api.Trip {
 			break
 		}
 	}
+	s.roadsMu.RLock()
 	path := dijkstra.ShortestPath(s, srcIndex, dstIndex)
+	s.roadsMu.RUnlock()
 	cities := make([]api.City, len(path))
 	for i := 0; i < len(path); i++ {
 		cities[i] = s.cities[path[i]]
 	}
-	return api.NewTrip(cities)
+	roads := make([]api.Road, len(cities)-1)
+	for i := 0; i < len(cities)-1; i++ {
+		roads[i], _ = s.Road(cities[i].Name(), cities[i+1].Name())
+	}
+	return api.NewTrip(cities, roads)
 }
 func (s *simulation) generatePlate() string {
 	return (<-s.nextPlateCh).String()
@@ -101,6 +111,7 @@ func (s *simulation) AddCity(data api.CityData) api.City {
 	c := newCity(data, s)
 	s.cityMap[data.Name] = len(s.cities)
 	s.cities = append(s.cities, c)
+	s.listener.CityAdded(c)
 	return c
 }
 func (s *simulation) RemoveCity(c api.City) {
@@ -127,6 +138,7 @@ func (s *simulation) RemoveCity(c api.City) {
 		}
 	}
 	s.cities = append(s.cities[:index], s.cities[index+1:]...)
+	s.listener.CityRemoved(c)
 }
 
 func (s *simulation) AddRoad(a, b api.City, data api.RoadData) (atob api.Road, btoa api.Road) {
@@ -159,6 +171,7 @@ func (s *simulation) AddOneWayRoad(src, dst api.City, data api.RoadData) api.Roa
 
 	s.roadMap[name] = len(s.roads)
 	s.roads = append(s.roads, r)
+	s.listener.RoadAdded(r)
 	return r
 }
 func (s *simulation) RemoveRoad(r api.Road) {
@@ -181,6 +194,7 @@ func (s *simulation) RemoveRoad(r api.Road) {
 		}
 	}
 	s.roads = append(s.roads[:index], s.roads[index+1:]...)
+	s.listener.RoadRemoved(r)
 }
 
 func (s *simulation) City(name string) api.City {
@@ -290,6 +304,10 @@ func (s *simulation) PackData() api.SimulationData {
 	}
 
 	return data
+}
+
+func (s *simulation) SetListener(listener api.Listener) {
+	s.listener.Listener = listener
 }
 
 func (s *simulation) Speed() float64 {

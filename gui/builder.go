@@ -9,26 +9,21 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com.bisoncorp.autostrade/game"
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/gui/controller"
 	gamewid "github.com.bisoncorp.autostrade/gui/widget"
 	"github.com.bisoncorp.autostrade/sampledata"
 	"image/color"
-	"io"
 	"time"
 )
 
-func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Application) (fyne.CanvasObject, *fyne.MainMenu) {
+func buildSimulationUi(sim api.Simulation, window fyne.Window) (fyne.CanvasObject, *fyne.MainMenu) {
 	simulationRunnableController := controller.NewRunnableController(sim)
 	simulationSpeedableController := controller.NewSpeedableController(sim)
 	hintController, hintObject := controller.NewHintController()
 
-	leftCnt, addCity := buildCityPropertiesContainer(window)
-	rightCnt, addVehicle := buildVehiclesPropertiesContainer(window)
-
-	mapObject, mapWidget := buildMap()
-	mapWidget.SimulationHook = sim
+	mapObject, mapWidget := buildMap(sim)
+	sim.SetListener(mapWidget)
 	mapWidget.Refresh()
 	go func() {
 		ticker := time.NewTicker(time.Second / 60)
@@ -37,6 +32,9 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Appl
 			mapWidget.Refresh()
 		}
 	}()
+
+	leftCnt, addCity := buildCityPropertiesContainer(window)
+	rightCnt, addVehicle := buildVehiclesPropertiesContainer(mapWidget, sim, window)
 
 	mapWidget.OnCityTapped = func(hook api.City) {
 		addCity(hook)
@@ -50,10 +48,10 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Appl
 		container.NewBorder(nil, nil, nil, hintObject, buildSimulationControlBar(simulationRunnableController, simulationSpeedableController)),
 		leftCnt, rightCnt,
 		mapObject,
-	), buildMenu(sim, simulationRunnableController, simulationSpeedableController, window, application)
+	), buildMenu(simulationRunnableController, simulationSpeedableController, window)
 }
 
-func buildMap() (fyne.CanvasObject, *gamewid.Map) {
+func buildMap(sim api.Simulation) (fyne.CanvasObject, *gamewid.Map) {
 	background := canvas.NewImageFromImage(sampledata.ItalyMap())
 	size := background.Image.Bounds().Size()
 	fSize := fyne.NewSize(float32(size.X), float32(size.Y))
@@ -61,10 +59,11 @@ func buildMap() (fyne.CanvasObject, *gamewid.Map) {
 	background.SetMinSize(fyne.NewSize(600*ratio, 600))
 	background.Resize(background.MinSize())
 
-	mapWidget := gamewid.NewMap()
+	mapWidget := gamewid.NewMap(sim)
 	mapWidget.MapSize = background.MinSize()
+	mapWidget.Resize(mapWidget.MinSize())
 
-	cnt := container.NewMax(container.NewWithoutLayout(background), mapWidget)
+	cnt := container.NewCenter(container.NewWithoutLayout(background, mapWidget))
 	scroll := container.NewScroll(cnt)
 	return scroll, mapWidget
 }
@@ -102,7 +101,7 @@ func buildCityPropertiesContainer(window fyne.Window) (obj fyne.CanvasObject, ad
 	}
 	return accordion, addCity
 }
-func buildVehiclesPropertiesContainer(window fyne.Window) (obj fyne.CanvasObject, add func(api.Vehicle)) {
+func buildVehiclesPropertiesContainer(mapWidget *gamewid.Map, simulation api.Simulation, window fyne.Window) (obj fyne.CanvasObject, add func(api.Vehicle)) {
 	vehicles := make(map[api.Vehicle]int)
 	accordion := widget.NewAccordion()
 	addVehicle := func(vehicle api.Vehicle) {
@@ -113,7 +112,7 @@ func buildVehiclesPropertiesContainer(window fyne.Window) (obj fyne.CanvasObject
 
 		title := fmt.Sprintf("Vehicle Property [%s]", vehicle.Plate())
 		item := widget.NewAccordionItem(title, nil)
-		content, closeView := buildVehicleProperty(vehicle, window)
+		content, closeView := buildVehicleProperty(vehicle, mapWidget, simulation, window)
 		closeBtn := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() {
 			index := vehicles[vehicle]
 			for k, v := range vehicles {
@@ -216,12 +215,25 @@ func buildCityProperty(city api.City, window fyne.Window) fyne.CanvasObject {
 
 	return widget.NewForm(nameItem, positionItem, colorItem, processingItem, generationItem, stateItem)
 }
-func buildVehicleProperty(vehicle api.Vehicle, window fyne.Window) (obj fyne.CanvasObject, clear func()) {
+func buildVehicleProperty(vehicle api.Vehicle, mapWidget *gamewid.Map, simulation api.Simulation, window fyne.Window) (obj fyne.CanvasObject, clear func()) {
 	plateItem := widget.NewFormItem("Plate", widget.NewLabel(vehicle.Plate()))
 	colorItem := widget.NewFormItem("Color", buildColorChooser(controller.NewColorableController(vehicle), window))
 	speedItem := widget.NewFormItem("Speed", buildSpeedSlider(vehicle.PreferredSpeed, vehicle.SetPreferredSpeed))
 	bar := widget.NewProgressBar()
 	progressItem := widget.NewFormItem("Progress", bar)
+	tripLabel := widget.NewLabel("")
+	tripItem := widget.NewFormItem("Trip", tripLabel)
+	trip := vehicle.Trip()
+	roads := trip.Roads()
+	n := len(roads)
+	for i := 0; i < n; i++ {
+		opp, _ := simulation.Road(roads[i].Dst().Name(), roads[i].Src().Name())
+		roads = append(roads, opp)
+	}
+	seeTripItem := widget.NewFormItem("See On Map", widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		mapWidget.ColorRoads(roads, theme.PrimaryColor())
+	}))
+
 	stopCh := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(time.Second / 60)
@@ -233,13 +245,16 @@ func buildVehicleProperty(vehicle api.Vehicle, window fyne.Window) (obj fyne.Can
 			case <-ticker.C:
 				bar.Value = vehicle.Progress()
 				bar.Refresh()
+				trip := vehicle.Trip()
+				tripLabel.SetText(trip.String())
 			}
 		}
 	}()
 
-	return widget.NewForm(plateItem, colorItem, speedItem, progressItem), func() {
+	return widget.NewForm(plateItem, colorItem, speedItem, progressItem, tripItem, seeTripItem), func() {
 		stopCh <- struct{}{}
 		close(stopCh)
+		mapWidget.ColorRoads(roads, theme.ForegroundColor())
 	}
 }
 
@@ -263,9 +278,9 @@ func buildColorChooser(ctrl *controller.ColorableController, window fyne.Window)
 func buildDurationSlider(get func() time.Duration, set func(duration time.Duration)) fyne.CanvasObject {
 	label := widget.NewLabel(get().String())
 	label.Alignment = fyne.TextAlignCenter
-	slider := widget.NewSlider(float64(time.Second/10), float64(time.Hour))
+	slider := widget.NewSlider(float64(time.Second/10), float64(time.Minute*2))
 	slider.SetValue(float64(get()))
-	slider.Step = float64(time.Second)
+	slider.Step = float64(time.Second / 10)
 	slider.OnChanged = func(f float64) {
 		d := time.Duration(f)
 		set(d)
@@ -345,8 +360,8 @@ func buildToolbar(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Window
 	return container.NewHBox(addCityBtn, remCityBtn, moveCityBtn, widget.NewSeparator(), addRoadBtn)
 }
 
-func buildMenu(sim api.Simulation, rc *controller.RunnableController, sc *controller.SpeedableController, window fyne.Window, application *Application) *fyne.MainMenu {
-	return fyne.NewMainMenu(buildFileMenu(sim, window, application), buildSimulationMenu(rc, sc, window))
+func buildMenu(rc *controller.RunnableController, sc *controller.SpeedableController, window fyne.Window) *fyne.MainMenu {
+	return fyne.NewMainMenu(buildSimulationMenu(rc, sc, window))
 }
 func buildSimulationMenu(rc *controller.RunnableController, sc *controller.SpeedableController, window fyne.Window) *fyne.Menu {
 	start := fyne.NewMenuItem("Start", rc.Start)
@@ -367,59 +382,6 @@ func buildSimulationMenu(rc *controller.RunnableController, sc *controller.Speed
 	speed.Icon = theme.MediaFastForwardIcon()
 
 	return fyne.NewMenu("Simulation", start, stop, speed)
-}
-func buildFileMenu(sim api.Simulation, window fyne.Window, application *Application) *fyne.Menu {
-	var writer io.Writer
-	saveWithName := func() {
-		dialog.ShowFileSave(func(file fyne.URIWriteCloser, err error) {
-			if file == nil {
-				return
-			}
-			writer = file
-			data := sim.PackData()
-			data.Vehicles = make([]struct {
-				api.VehicleData
-				RoadIndex int
-			}, 0)
-			api.WriteSimulationData(data, writer)
-		}, window)
-	}
-	saveWithNameItem := fyne.NewMenuItem("Save With Name", saveWithName)
-	saveWithNameItem.Icon = theme.DocumentSaveIcon()
-
-	saveItem := fyne.NewMenuItem("Save", func() {
-		if writer == nil {
-			saveWithName()
-			return
-		}
-		data := sim.PackData()
-		data.Vehicles = make([]struct {
-			api.VehicleData
-			RoadIndex int
-		}, 0)
-		api.WriteSimulationData(data, writer)
-
-	})
-	saveItem.Icon = theme.DocumentSaveIcon()
-
-	openItem := fyne.NewMenuItem("Open", func() {
-		dialog.ShowFileOpen(func(file fyne.URIReadCloser, err error) {
-			if file == nil {
-				return
-			}
-			data := api.ReadSimulationData(file)
-			ns := game.NewFromData(data)
-			application.NewWindow(ns)
-		}, window)
-	})
-	openItem.Icon = theme.FileIcon()
-
-	newItem := fyne.NewMenuItem("New", func() {
-		application.NewWindow(game.New())
-	})
-	newItem.Icon = theme.ContentAddIcon()
-
-	return fyne.NewMenu("File", saveItem, saveWithNameItem, openItem, newItem)
 }
 
 func showCityForm(sim api.Simulation, window fyne.Window) <-chan api.CityData {
@@ -531,8 +493,8 @@ func actionAddCity(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Windo
 
 		posCh := make(chan fyne.Position)
 		defer close(posCh)
-		mapWidget.OnTapped = func(event *fyne.PointEvent) {
-			posCh <- event.Position
+		mapWidget.OnTapped = func(position fyne.Position) {
+			posCh <- position
 		}
 		defer func() { mapWidget.OnTapped = nil }()
 
@@ -617,8 +579,8 @@ func actionMoveCity(sim api.Simulation, mapWidget *gamewid.Map, hintController *
 			chName <- hook.Name()
 		}
 		defer func() { mapWidget.OnCityTapped = oldFn }()
-		mapWidget.OnTapped = func(event *fyne.PointEvent) {
-			chPos <- event.Position
+		mapWidget.OnTapped = func(position fyne.Position) {
+			chPos <- position
 		}
 		defer func() { mapWidget.OnTapped = nil }()
 

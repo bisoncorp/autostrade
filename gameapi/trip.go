@@ -2,11 +2,20 @@ package gameapi
 
 type Trip struct {
 	cities []City
+	roads  []Road
 	index  int
 }
 
-func NewTrip(cities []City) Trip {
-	return Trip{cities: cities}
+func NewTrip(cities []City, roads []Road) Trip {
+	return Trip{cities: cities, roads: roads}
+}
+
+func (t *Trip) Cities() []City {
+	return t.cities
+}
+
+func (t *Trip) Roads() []Road {
+	return t.roads
 }
 
 func (t *Trip) Next() {

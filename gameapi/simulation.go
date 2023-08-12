@@ -31,6 +31,17 @@ type Simulation interface {
 
 	PackData() SimulationData
 
+	SetListener(Listener)
+
 	Speedable
 	Runnable
+}
+
+type Listener interface {
+	CityAdded(City)
+	CityRemoved(City)
+	RoadAdded(Road)
+	RoadRemoved(Road)
+	VehicleSpawned(Vehicle)
+	VehicleDespawned(Vehicle)
 }
