@@ -106,6 +106,7 @@ func moveVehicle(v *vehicle, timeElapsed float64, maxSpeed float64, distance flo
 func (r *road) route(v *vehicle) {
 	v.propertyMu.Lock()
 	v.VehicleData.Progress = 0
+	v.currentRoad = r
 	v.propertyMu.Unlock()
 	r.vehicleQueue.In() <- v
 }

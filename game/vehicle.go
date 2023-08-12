@@ -10,7 +10,8 @@ type vehicle struct {
 	api.VehicleData
 	propertyMu sync.RWMutex
 
-	trip api.Trip
+	trip        api.Trip
+	currentRoad *road
 }
 
 func newVehicle(data api.VehicleData, trip api.Trip) *vehicle {
@@ -49,6 +50,9 @@ func (v *vehicle) SetPreferredSpeed(f float64) {
 }
 func (v *vehicle) Trip() api.Trip {
 	return v.trip
+}
+func (v *vehicle) Road() api.Road {
+	return v.currentRoad
 }
 
 func colorToRgba(c color.Color) color.RGBA {

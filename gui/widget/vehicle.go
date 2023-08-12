@@ -10,16 +10,21 @@ import (
 	"image/color"
 )
 
+func vehicleMinSize() fyne.Size {
+	return fyne.NewSize(vehicleDimension+theme.Padding(), vehicleDimension+theme.Padding())
+}
+
 type Vehicle struct {
 	widget.BaseWidget
-	data     api.VehicleData
-	onTapped func(data api.VehicleData)
+
+	hook     api.Vehicle
+	onTapped func(api.Vehicle)
 	hover    bool
 }
 
-func (v *Vehicle) SetData(data api.VehicleData) {
-	v.data = data
-	v.Refresh()
+func (v *Vehicle) center() fyne.Position {
+	size := v.Size()
+	return fyne.NewPos(size.Width/2, size.Height/2)
 }
 
 func (v *Vehicle) Cursor() desktop.Cursor {
@@ -35,8 +40,9 @@ func (v *Vehicle) MouseOut() {
 	v.Refresh()
 }
 func (v *Vehicle) Tapped(_ *fyne.PointEvent) {
-	v.onTapped(v.data)
+	v.onTapped(v.hook)
 }
+
 func (v *Vehicle) CreateRenderer() fyne.WidgetRenderer {
 	circle := canvas.NewCircle(color.Transparent)
 	hoverCircle := canvas.NewCircle(color.Transparent)
@@ -48,9 +54,10 @@ func (v *Vehicle) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
-func NewVehicle(onTapped func(data api.VehicleData)) *Vehicle {
-	v := &Vehicle{onTapped: onTapped}
+func NewVehicle(hook api.Vehicle, onTapped func(api.Vehicle)) *Vehicle {
+	v := &Vehicle{hook: hook, onTapped: onTapped}
 	v.ExtendBaseWidget(v)
+	v.Refresh()
 	return v
 }
 
@@ -67,8 +74,9 @@ func (v *vehicleRenderer) Layout(size fyne.Size) {
 	v.circle.Move(fyne.NewPos(theme.Padding()/2, theme.Padding()/2))
 }
 func (v *vehicleRenderer) MinSize() fyne.Size {
-	return fyne.NewSize(vehicleDimension+theme.Padding(), vehicleDimension+theme.Padding())
+	return vehicleMinSize()
 }
+
 func (v *vehicleRenderer) Objects() []fyne.CanvasObject {
 	return v.objects
 }
@@ -78,7 +86,7 @@ func (v *vehicleRenderer) Refresh() {
 	} else {
 		v.hoverCircle.Hide()
 	}
-	col := v.wid.data.Color
+	col := v.wid.hook.Color()
 	v.circle.FillColor = col
 	v.circle.Refresh()
 	v.hoverCircle.FillColor = hoverColor(col)

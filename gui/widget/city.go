@@ -10,16 +10,21 @@ import (
 	"image/color"
 )
 
+func cityMinSize() fyne.Size {
+	return fyne.NewSize(cityDimension+theme.Padding(), cityDimension+theme.Padding())
+}
+
 type City struct {
 	widget.BaseWidget
-	onTapped func(data api.CityData)
-	data     api.CityData
+
+	hook     api.City
+	onTapped func(api.City)
 	hover    bool
 }
 
-func (c *City) SetData(data api.CityData) {
-	c.data = data
-	c.Refresh()
+func (c *City) center() fyne.Position {
+	size := c.MinSize()
+	return fyne.NewPos(size.Width/2, size.Height/2)
 }
 
 func (c *City) Cursor() desktop.Cursor {
@@ -35,14 +40,14 @@ func (c *City) MouseOut() {
 	c.Refresh()
 }
 func (c *City) Tapped(e *fyne.PointEvent) {
-	c.onTapped(c.data)
+	c.onTapped(c.hook)
 }
 func (c *City) CreateRenderer() fyne.WidgetRenderer {
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(cityDimension, cityDimension))
 
 	hoverRect := canvas.NewRectangle(color.Transparent)
-	hoverRect.SetMinSize(fyne.NewSize(cityDimension+theme.Padding(), cityDimension+theme.Padding()))
+	hoverRect.SetMinSize(cityMinSize())
 
 	objects := []fyne.CanvasObject{hoverRect, rect}
 	return &cityRenderer{
@@ -53,8 +58,8 @@ func (c *City) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
-func NewCity(data api.CityData, onTapped func(api.CityData)) *City {
-	c := &City{data: data, onTapped: onTapped}
+func NewCity(hook api.City, onTapped func(api.City)) *City {
+	c := &City{hook: hook, onTapped: onTapped}
 	c.ExtendBaseWidget(c)
 	c.Refresh()
 	return c
@@ -89,10 +94,10 @@ func (c *cityRenderer) Refresh() {
 	} else {
 		c.hoverRect.Hide()
 	}
-	data := c.wid.data
-	c.rect.FillColor = data.Color
+	col := c.wid.hook.Color()
+	c.rect.FillColor = col
 	c.rect.Refresh()
-	c.hoverRect.FillColor = hoverColor(data.Color)
+	c.hoverRect.FillColor = hoverColor(col)
 	c.hoverRect.Refresh()
 }
 

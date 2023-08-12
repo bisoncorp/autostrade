@@ -26,6 +26,9 @@ type Simulation interface {
 	Road(a, b string) (atob, btoa Road)
 	Vehicle(plate string) Vehicle
 
+	Cities() []City
+	Roads() []Road
+
 	PackData() SimulationData
 
 	Speedable

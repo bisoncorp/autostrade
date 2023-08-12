@@ -28,17 +28,21 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Appl
 	rightCnt, addVehicle := buildVehiclesPropertiesContainer(window)
 
 	mapObject, mapWidget := buildMap()
+	mapWidget.SimulationHook = sim
+	mapWidget.Refresh()
+	go func() {
+		ticker := time.NewTicker(time.Second / 60)
+		for {
+			<-ticker.C
+			mapWidget.Refresh()
+		}
+	}()
 
-	mapWidget.OnCityTapped = func(data api.CityData) {
-		c := sim.City(data.Name)
-		addCity(c)
+	mapWidget.OnCityTapped = func(hook api.City) {
+		addCity(hook)
 	}
-	mapWidget.OnVehicleTapped = func(data api.VehicleData) {
-		v := sim.Vehicle(data.Plate)
-		addVehicle(v)
-	}
-	mapWidget.OnDataRequired = func() api.SimulationData {
-		return sim.PackData()
+	mapWidget.OnVehicleTapped = func(hook api.Vehicle) {
+		addVehicle(hook)
 	}
 
 	return container.NewBorder(
@@ -50,8 +54,6 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Appl
 }
 
 func buildMap() (fyne.CanvasObject, *gamewid.Map) {
-	mapWidget := gamewid.NewMap()
-
 	background := canvas.NewImageFromImage(sampledata.ItalyMap())
 	size := background.Image.Bounds().Size()
 	fSize := fyne.NewSize(float32(size.X), float32(size.Y))
@@ -59,9 +61,11 @@ func buildMap() (fyne.CanvasObject, *gamewid.Map) {
 	background.SetMinSize(fyne.NewSize(600*ratio, 600))
 	background.Resize(background.MinSize())
 
+	mapWidget := gamewid.NewMap()
+	mapWidget.MapSize = background.MinSize()
+
 	cnt := container.NewMax(container.NewWithoutLayout(background), mapWidget)
 	scroll := container.NewScroll(cnt)
-	scroll.SetMinSize(fyne.NewSize(600*ratio, 600))
 	return scroll, mapWidget
 }
 
@@ -555,11 +559,7 @@ func actionAddRoad(sim api.Simulation, mapWidget *gamewid.Map, window fyne.Windo
 		cityCh := make(chan api.City)
 		defer close(cityCh)
 		oldFn := mapWidget.OnCityTapped
-		mapWidget.OnCityTapped = func(data api.CityData) {
-			city := sim.City(data.Name)
-			if city == nil {
-				panic("city is nil, unexpected")
-			}
+		mapWidget.OnCityTapped = func(city api.City) {
 			cityCh <- city
 		}
 		defer func() { mapWidget.OnCityTapped = oldFn }()
@@ -594,8 +594,8 @@ func actionRemCity(sim api.Simulation, mapWidget *gamewid.Map, hintController *c
 	go func() {
 		ch := make(chan string)
 		oldFn := mapWidget.OnCityTapped
-		mapWidget.OnCityTapped = func(data api.CityData) {
-			ch <- data.Name
+		mapWidget.OnCityTapped = func(hook api.City) {
+			ch <- hook.Name()
 		}
 		defer func() { mapWidget.OnCityTapped = oldFn }()
 
@@ -613,8 +613,8 @@ func actionMoveCity(sim api.Simulation, mapWidget *gamewid.Map, hintController *
 		defer close(chName)
 		defer close(chPos)
 		oldFn := mapWidget.OnCityTapped
-		mapWidget.OnCityTapped = func(data api.CityData) {
-			chName <- data.Name
+		mapWidget.OnCityTapped = func(hook api.City) {
+			chName <- hook.Name()
 		}
 		defer func() { mapWidget.OnCityTapped = oldFn }()
 		mapWidget.OnTapped = func(event *fyne.PointEvent) {

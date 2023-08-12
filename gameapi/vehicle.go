@@ -24,4 +24,5 @@ type Vehicle interface {
 	SetPreferredSpeed(float64)
 
 	Trip() Trip
+	Road() Road
 }

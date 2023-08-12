@@ -6,17 +6,14 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	api "github.com.bisoncorp.autostrade/gameapi"
+	"math"
 )
 
 type Road struct {
 	widget.BaseWidget
-	data     api.RoadData
-	src, dst api.CityData
-}
 
-func (r *Road) SetData(data api.RoadData, src, dst api.CityData) {
-	r.data, r.src, r.dst = data, src, dst
-	r.Refresh()
+	hook      api.Road
+	highlight bool
 }
 
 func (r *Road) CreateRenderer() fyne.WidgetRenderer {
@@ -29,9 +26,10 @@ func (r *Road) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
-func NewRoad() *Road {
-	r := &Road{}
+func NewRoad(hook api.Road) *Road {
+	r := &Road{hook: hook}
 	r.ExtendBaseWidget(r)
+	r.Refresh()
 	return r
 }
 
@@ -42,17 +40,22 @@ type roadRenderer struct {
 }
 
 func (r *roadRenderer) Destroy() {}
-func (r *roadRenderer) Layout(_ fyne.Size) {
-	r.line.Position1 = scale(r.wid.src.Pos.ToPos32(), scaleFactor)
-	r.line.Position2 = scale(r.wid.dst.Pos.ToPos32(), scaleFactor)
-	r.line.Refresh()
+func (r *roadRenderer) Layout(size fyne.Size) {
+	r.line.Resize(size)
 }
 func (r *roadRenderer) MinSize() fyne.Size {
-	return r.line.MinSize()
+	srcPos, dstPos := r.wid.hook.Src().Position(), r.wid.hook.Dst().Position()
+	w := math.Abs(srcPos.X - dstPos.X)
+	h := math.Abs(srcPos.Y - dstPos.Y)
+	return fyne.NewSize(float32(w), float32(h))
 }
 func (r *roadRenderer) Objects() []fyne.CanvasObject {
 	return r.objects
 }
 func (r *roadRenderer) Refresh() {
-	r.Layout(fyne.Size{})
+	if r.wid.highlight {
+		r.line.StrokeColor = theme.PrimaryColor()
+	} else {
+		r.line.StrokeColor = theme.ForegroundColor()
+	}
 }

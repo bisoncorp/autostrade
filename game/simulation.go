@@ -217,6 +217,25 @@ func (s *simulation) Vehicle(plate string) api.Vehicle {
 	return nil
 }
 
+func (s *simulation) Cities() []api.City {
+	s.citiesMu.RLock()
+	defer s.citiesMu.RUnlock()
+	cities := make([]api.City, len(s.cities))
+	for i := 0; i < len(s.cities); i++ {
+		cities[i] = s.cities[i]
+	}
+	return cities
+}
+func (s *simulation) Roads() []api.Road {
+	s.roadsMu.RLock()
+	defer s.roadsMu.RUnlock()
+	roads := make([]api.Road, len(s.roads))
+	for i := 0; i < len(s.roads); i++ {
+		roads[i] = s.roads[i]
+	}
+	return roads
+}
+
 func (s *simulation) PackData() api.SimulationData {
 	s.citiesMu.RLock()
 	defer s.citiesMu.RUnlock()
