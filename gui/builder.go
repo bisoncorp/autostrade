@@ -11,8 +11,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 	api "github.com.bisoncorp.autostrade/gameapi"
 	"github.com.bisoncorp.autostrade/gui/controller"
+	sampledata2 "github.com.bisoncorp.autostrade/gui/sampledata"
 	gamewid "github.com.bisoncorp.autostrade/gui/widget"
-	"github.com.bisoncorp.autostrade/sampledata"
 	"image/color"
 	"time"
 )
@@ -52,7 +52,7 @@ func buildSimulationUi(sim api.Simulation, window fyne.Window) (fyne.CanvasObjec
 }
 
 func buildMap(sim api.Simulation) (fyne.CanvasObject, *gamewid.Map) {
-	background := canvas.NewImageFromImage(sampledata.ItalyMap())
+	background := canvas.NewImageFromImage(sampledata2.ItalyMap())
 	size := background.Image.Bounds().Size()
 	fSize := fyne.NewSize(float32(size.X), float32(size.Y))
 	ratio := fSize.Width / fSize.Height
@@ -393,7 +393,7 @@ func showCityForm(sim api.Simulation, window fyne.Window) <-chan api.CityData {
 		}
 		return nil
 	}
-	nameEntry.PlaceHolder = sampledata.RandomCityName()
+	nameEntry.PlaceHolder = sampledata2.RandomCityName()
 	nameItem := widget.NewFormItem("Name", nameEntry)
 
 	colorBuffer := controller.NewColorableController(controller.NewColorableBuffer(randomColor()))

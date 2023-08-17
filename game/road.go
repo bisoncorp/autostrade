@@ -145,10 +145,11 @@ func (r *road) NodeIndex() int {
 func (r *road) Weight() int {
 	distance := api.Distance(r.src.Position(), r.dst.Position())
 	tripTime := distance / r.MaxSpeed()
+	tripTime = 1 / tripTime
 	r.vehiclesMu.RLock()
 	vNum := float64(len(r.vehicles))
 	r.vehiclesMu.RUnlock()
-	vehiclePerKm := vNum / (distance)
+	vehiclePerKm := vNum / distance
 	tripTime *= vehiclePerKm
 	return int(tripTime)
 }

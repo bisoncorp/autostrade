@@ -184,7 +184,7 @@ func (c *city) RoadsOut() []api.Road {
 	defer c.roadsMu.RUnlock()
 	rs := make([]api.Road, len(c.roadsOut))
 	for i := 0; i < len(c.roadsOut); i++ {
-		rs[i] = c.roadsIn[i]
+		rs[i] = c.roadsOut[i]
 	}
 	return rs
 }

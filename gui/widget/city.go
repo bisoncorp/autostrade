@@ -30,6 +30,17 @@ func (c *City) center() fyne.Position {
 func (c *City) Cursor() desktop.Cursor {
 	return desktop.PointerCursor
 }
+
+func (c *City) Dragged(event *fyne.DragEvent) {
+	pos := c.hook.Position()
+	c.hook.SetPosition(api.Position{
+		X: pos.X + float64(event.Dragged.DX),
+		Y: pos.Y + float64(event.Dragged.DY),
+	})
+}
+
+func (c *City) DragEnd() {}
+
 func (c *City) MouseIn(_ *desktop.MouseEvent) {
 	c.hover = true
 	c.Refresh()
