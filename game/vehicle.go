@@ -1,7 +1,7 @@
 package game
 
 import (
-	api "github.com.bisoncorp.autostrade/gameapi"
+	api "github.com/bisoncorp/autostrade/gameapi"
 	"image/color"
 	"sync"
 )

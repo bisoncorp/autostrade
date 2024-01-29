@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"github.com.bisoncorp.autostrade/gameapi"
+	"github.com/bisoncorp/autostrade/gameapi"
 	"sync/atomic"
 )
 

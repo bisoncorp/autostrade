@@ -2,9 +2,9 @@ package game
 
 import (
 	"fmt"
-	api "github.com.bisoncorp.autostrade/gameapi"
-	"github.com.bisoncorp.autostrade/graph"
-	"github.com.bisoncorp.autostrade/graph/dijkstra"
+	api "github.com/bisoncorp/autostrade/gameapi"
+	"github.com/bisoncorp/graph/dijkstra"
+	"github.com/bisoncorp/graph"
 	"math/rand"
 	"sync"
 	"sync/atomic"

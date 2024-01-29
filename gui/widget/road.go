@@ -5,7 +5,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	api "github.com.bisoncorp.autostrade/gameapi"
+	api "github.com/bisoncorp/autostrade/gameapi"
 )
 
 type Road struct {

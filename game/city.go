@@ -1,9 +1,9 @@
 package game
 
 import (
-	"github.com.bisoncorp.autostrade/game/utils"
-	api "github.com.bisoncorp.autostrade/gameapi"
-	"github.com.bisoncorp.autostrade/graph"
+	"github.com/bisoncorp/autostrade/game/utils"
+	api "github.com/bisoncorp/autostrade/gameapi"
+	"github.com/bisoncorp/graph"
 	"image/color"
 	"math/rand"
 	"sync"

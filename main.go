@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com.bisoncorp.autostrade/game"
-	api "github.com.bisoncorp.autostrade/gameapi"
-	"github.com.bisoncorp.autostrade/gui"
+	"github.com/bisoncorp/autostrade/game"
+	api "github.com/bisoncorp/autostrade/gameapi"
+	"github.com/bisoncorp/autostrade/gui"
 	"log"
 	"os"
 )

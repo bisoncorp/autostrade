@@ -1,6 +1,6 @@
 package game
 
-import api "github.com.bisoncorp.autostrade/gameapi"
+import api "github.com/bisoncorp/autostrade/gameapi"
 
 func New() api.Simulation {
 	return NewFromData(api.SimulationData{LastPlate: api.FirstPlate})

@@ -3,7 +3,7 @@ package gui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	api "github.com.bisoncorp.autostrade/gameapi"
+	api "github.com/bisoncorp/autostrade/gameapi"
 )
 
 type Application struct {

@@ -9,14 +9,14 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com.bisoncorp.autostrade/game"
-	api "github.com.bisoncorp.autostrade/gameapi"
-	"github.com.bisoncorp.autostrade/gui/controller"
-	gamewid "github.com.bisoncorp.autostrade/gui/widget"
-	"github.com.bisoncorp.autostrade/sampledata"
+	"github.com/bisoncorp/autostrade/game"
+	api "github.com/bisoncorp/autostrade/gameapi"
+	"github.com/bisoncorp/autostrade/gui/controller"
+	gamewid "github.com/bisoncorp/autostrade/gui/widget"
+	"github.com/bisoncorp/autostrade/sampledata"
 	"image/color"
 	"io"
-	"time"
+	"time"	
 )
 
 func buildSimulationUi(sim api.Simulation, window fyne.Window, application *Application) (fyne.CanvasObject, *fyne.MainMenu) {
